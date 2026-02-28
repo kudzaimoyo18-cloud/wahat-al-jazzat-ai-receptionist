@@ -1,0 +1,669 @@
+{
+  "name": "Wahat Al Jazzat - AI Receptionist",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "wahat-al-jazzat/chat",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook - Customer Chat",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "wahat-chat"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse incoming message\nconst body = $input.first().json.body;\nconst sessionId = $input.first().json.headers['x-session-id'] || generateUUID();\n\nreturn {\n  sessionId,\n  message: body.message || '',\n  customerInfo: body.customerInfo || {},\n  timestamp: new Date().toISOString()\n};\n\nfunction generateUUID() {\n  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {\n    var r = Math.random() * 16 | 0,\n      v = c == 'x' ? r : (r & 0x3 | 0x8);\n    return v.toString(16);\n  });\n}"
+      },
+      "id": "parse-message",
+      "name": "Parse Customer Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "resource": "database",
+        "operation": "executeQuery",
+        "query": "=SELECT * FROM sessions WHERE session_id = '{{ $json.sessionId }}' ORDER BY created_at DESC LIMIT 1",
+        "options": {}
+      },
+      "id": "check-session",
+      "name": "Check Existing Session",
+      "type": "n8n-nodes-base.mysql",
+      "typeVersion": 1,
+      "position": [650, 300],
+      "credentials": {
+        "mysql": {
+          "id": "1",
+          "name": "MySQL Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.length }}",
+              "operation": "equals",
+              "value2": "0"
+            }
+          ]
+        }
+      },
+      "id": "has-session",
+      "name": "Has Existing Session?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "resource": "database",
+        "operation": "executeQuery",
+        "query": "=INSERT INTO sessions (session_id, customer_name, phone_number, created_at) VALUES ('{{ $json.sessionId }}', '{{ $json.customerInfo.name }}', '{{ $json.customerInfo.phone }}', NOW())",
+        "options": {}
+      },
+      "id": "create-session",
+      "name": "Create New Session",
+      "type": "n8n-nodes-base.mysql",
+      "typeVersion": 1,
+      "position": [1050, 200],
+      "credentials": {
+        "mysql": {
+          "id": "1",
+          "name": "MySQL Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "database",
+        "operation": "executeQuery",
+        "query": "SELECT * FROM menu_items WHERE is_active = 1 ORDER BY category, item_name",
+        "options": {}
+      },
+      "id": "get-menu",
+      "name": "Get Menu Items",
+      "type": "n8n-nodes-base.mysql",
+      "typeVersion": 1,
+      "position": [1050, 400],
+      "credentials": {
+        "mysql": {
+          "id": "1",
+          "name": "MySQL Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "claude-3-5-sonnet-20241022",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "You are the AI receptionist for Wahat Al Jazzat Cafeteria, a traditional Bahraini restaurant. \n\nYour role:\n- Greet customers warmly in Arabic and English\n- Help them browse the menu and make recommendations\n- Take orders with details (quantity, special requests)\n- Answer questions about dishes, ingredients, preparation time\n- Suggest popular combinations and deals\n- Be friendly, helpful, and professional\n\nMenu Categories:\n1. BREAKFAST - Foul Madamas, Madrooba, Balaleet, Egg dishes\n2. MAIN DISHES - Chicken Machboos, Grilled Chicken, Chicken Curry, Fish\n3. RICE - White Rice, White Rice with Vermicelli\n4. BEVERAGES - Tea, Coffee, Karak, Fresh Juices\n5. CAKES & SNACKS - Assorted cakes, pastries\n\nWhen taking an order:\n- Confirm each item clearly\n- Ask for quantity\n- Note any special requests (spiciness level, modifications)\n- Calculate and state the total\n- Ask for pickup/delivery preference\n- Ask for name and phone number\n\nImportant:\n- Always be polite and patient\n- Use Arabic greetings when appropriate\n- Recommend popular dishes like Foul Madamas and Chicken Machboos\n- If unsure about something, ask politely for clarification"
+            },
+            {
+              "role": "user",
+              "content": "=Customer message: {{ $json.message }}\n\nMenu items:\n{{ $json.menuItems }}\n\nPrevious conversation:\n{{ $json.conversationHistory }}"
+            }
+          ]
+        },
+        "options": {
+          "maxTokens": 1000,
+          "temperature": 0.7
+        }
+      },
+      "id": "ai-response",
+      "name": "Generate AI Response",
+      "type": "@n8n/n8n-nodes-langchain.anthropic",
+      "typeVersion": 1,
+      "position": [1250, 300],
+      "credentials": {
+        "anthropicApi": {
+          "id": "1",
+          "name": "Anthropic API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Analyze AI response to detect order\nconst aiResponse = $input.first().json.message.content;\nconst menuItems = $('Get Menu Items').first().json;\n\nlet orderItems = [];\nlet isOrder = false;\n\n// Check if response mentions ordering\nif (aiResponse.toLowerCase().includes('order') ||\n    aiResponse.toLowerCase().includes('want') ||\n    aiResponse.toLowerCase().includes('like') ||\n    aiResponse.toLowerCase().includes('take')) {\n  isOrder = true;\n  \n  // Try to extract order items\n  menuItems.forEach(item => {\n    const regex = new RegExp(item.item_name, 'gi');\n    const match = aiResponse.match(regex);\n    if (match) {\n      // Extract quantity\n      const quantityMatch = aiResponse.match(/\\b(\\d+)\\s+${item.item_name}/gi);\n      const quantity = quantityMatch ? parseInt(quantityMatch[0]) : 1;\n      \n      orderItems.push({\n        item_id: item.id,\n        item_name: item.item_name,\n        price: item.price,\n        quantity: quantity,\n        subtotal: item.price * quantity\n      });\n    }\n  });\n}\n\nreturn {\n  aiResponse,\n  isOrder,\n  orderItems,\n  totalAmount: orderItems.reduce((sum, item) => sum + item.subtotal, 0)\n};"
+      },
+      "id": "detect-order",
+      "name": "Detect Order in Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1450, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.isOrder }}",
+              "operation": "equals",
+              "value2": "true"
+            }
+          ]
+        }
+      },
+      "id": "is-order",
+      "name": "Is This an Order?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1650, 300]
+    },
+    {
+      "parameters": {
+        "resource": "database",
+        "operation": "executeQuery",
+        "query": "=INSERT INTO orders (session_id, customer_name, phone_number, order_status, total_amount, created_at) VALUES ('{{ $json.sessionId }}', '{{ $json.customerInfo.name }}', '{{ $json.customerInfo.phone }}', 'pending', {{ $json.totalAmount }}, NOW())",
+        "options": {}
+      },
+      "id": "create-order",
+      "name": "Create Order",
+      "type": "n8n-nodes-base.mysql",
+      "typeVersion": 1,
+      "position": [1850, 200],
+      "credentials": {
+        "mysql": {
+          "id": "1",
+          "name": "MySQL Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "database",
+        "operation": "executeQuery",
+        "query": "=SELECT LAST_INSERT_ID() as order_id",
+        "options": {}
+      },
+      "id": "get-order-id",
+      "name": "Get Order ID",
+      "type": "n8n-nodes-base.mysql",
+      "typeVersion": 1,
+      "position": [2050, 200],
+      "credentials": {
+        "mysql": {
+          "id": "1",
+          "name": "MySQL Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "name": "orderItems",
+              "value": "={{ $json.orderItems }}",
+              "type": "array"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-order-items",
+      "name": "Set Order Items",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [2250, 200]
+    },
+    {
+      "parameters": {
+        "resource": "database",
+        "operation": "executeQuery",
+        "query": "=INSERT INTO order_items (order_id, item_id, quantity, price, subtotal) VALUES ({{ $json.orderId }}, {{ $json.item.item_id }}, {{ $json.item.quantity }}, {{ $json.item.price }}, {{ $json.item.subtotal }})",
+        "options": {}
+      },
+      "id": "insert-order-items",
+      "name": "Insert Order Items",
+      "type": "n8n-nodes-base.mysql",
+      "typeVersion": 1,
+      "position": [2450, 200],
+      "credentials": {
+        "mysql": {
+          "id": "1",
+          "name": "MySQL Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "database",
+        "operation": "executeQuery",
+        "query": "=INSERT INTO conversation_history (session_id, role, message, created_at) VALUES ('{{ $json.sessionId }}', 'customer', '{{ $json.message }}', NOW())",
+        "options": {}
+      },
+      "id": "save-customer-msg",
+      "name": "Save Customer Message",
+      "type": "n8n-nodes-base.mysql",
+      "typeVersion": 1,
+      "position": [1850, 400],
+      "credentials": {
+        "mysql": {
+          "id": "1",
+          "name": "MySQL Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "database",
+        "operation": "executeQuery",
+        "query": "=INSERT INTO conversation_history (session_id, role, message, created_at) VALUES ('{{ $json.sessionId }}', 'assistant', '{{ $json.aiResponse }}', NOW())",
+        "options": {}
+      },
+      "id": "save-ai-msg",
+      "name": "Save AI Response",
+      "type": "n8n-nodes-base.mysql",
+      "typeVersion": 1,
+      "position": [2050, 400],
+      "credentials": {
+        "mysql": {
+          "id": "1",
+          "name": "MySQL Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  response: $json.aiResponse,\n  orderId: $json.orderId || null,\n  orderStatus: $json.orderStatus || null,\n  sessionId: $json.sessionId\n} }}",
+        "options": {}
+      },
+      "id": "response",
+      "name": "Send Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2650, 300]
+    },
+    {
+      "parameters": {
+        "path": "wahat-al-jazzat/orders",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "kitchen-webhook",
+      "name": "Webhook - Kitchen Orders",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 700]
+    },
+    {
+      "parameters": {
+        "resource": "database",
+        "operation": "executeQuery",
+        "query": "SELECT o.*, s.customer_name, s.phone_number FROM orders o JOIN sessions s ON o.session_id = s.session_id WHERE o.order_status IN ('pending', 'preparing', 'ready') ORDER BY o.created_at ASC",
+        "options": {}
+      },
+      "id": "get-active-orders",
+      "name": "Get Active Orders",
+      "type": "n8n-nodes-base.mysql",
+      "typeVersion": 1,
+      "position": [450, 700],
+      "credentials": {
+        "mysql": {
+          "id": "1",
+          "name": "MySQL Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "database",
+        "operation": "executeQuery",
+        "query": "=SELECT oi.*, m.item_name FROM order_items oi JOIN menu_items m ON oi.item_id = m.id WHERE oi.order_id = {{ $json.id }}",
+        "options": {}
+      },
+      "id": "get-order-items",
+      "name": "Get Order Items",
+      "type": "n8n-nodes-base.mysql",
+      "typeVersion": 1,
+      "position": [650, 700],
+      "credentials": {
+        "mysql": {
+          "id": "1",
+          "name": "MySQL Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "name": "items",
+              "value": "={{ $json }}",
+              "type": "array"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "combine-orders",
+      "name": "Combine Orders with Items",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [850, 700]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  orders: $json\n} }}",
+        "options": {}
+      },
+      "id": "kitchen-response",
+      "name": "Send Orders to Kitchen",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1050, 700]
+    },
+    {
+      "parameters": {
+        "path": "wahat-al-jazzat/orders/{{ $json.orderId }}/status",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "update-status-webhook",
+      "name": "Webhook - Update Status",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 900]
+    },
+    {
+      "parameters": {
+        "resource": "database",
+        "operation": "executeQuery",
+        "query": "=UPDATE orders SET order_status = '{{ $json.status }}', updated_at = NOW() WHERE id = {{ $json.orderId }}",
+        "options": {}
+      },
+      "id": "update-order-status",
+      "name": "Update Order Status",
+      "type": "n8n-nodes-base.mysql",
+      "typeVersion": 1,
+      "position": [450, 900],
+      "credentials": {
+        "mysql": {
+          "id": "1",
+          "name": "MySQL Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  success: true,\n  message: 'Order status updated successfully'\n} }}",
+        "options": {}
+      },
+      "id": "status-response",
+      "name": "Send Status Update Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [650, 900]
+    }
+  ],
+  "connections": {
+    "Webhook - Customer Chat": {
+      "main": [
+        [
+          {
+            "node": "Parse Customer Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Customer Message": {
+      "main": [
+        [
+          {
+            "node": "Check Existing Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Existing Session": {
+      "main": [
+        [
+          {
+            "node": "Has Existing Session?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Existing Session?": {
+      "main": [
+        [
+          {
+            "node": "Create New Session",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Menu Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create New Session": {
+      "main": [
+        [
+          {
+            "node": "Get Menu Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Menu Items": {
+      "main": [
+        [
+          {
+            "node": "Generate AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate AI Response": {
+      "main": [
+        [
+          {
+            "node": "Detect Order in Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect Order in Response": {
+      "main": [
+        [
+          {
+            "node": "Is This an Order?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is This an Order?": {
+      "main": [
+        [
+          {
+            "node": "Create Order",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Save Customer Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Order": {
+      "main": [
+        [
+          {
+            "node": "Get Order ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Order ID": {
+      "main": [
+        [
+          {
+            "node": "Set Order Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Order Items": {
+      "main": [
+        [
+          {
+            "node": "Insert Order Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Order Items": {
+      "main": [
+        [
+          {
+            "node": "Save Customer Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Customer Message": {
+      "main": [
+        [
+          {
+            "node": "Save AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save AI Response": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook - Kitchen Orders": {
+      "main": [
+        [
+          {
+            "node": "Get Active Orders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Active Orders": {
+      "main": [
+        [
+          {
+            "node": "Get Order Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Order Items": {
+      "main": [
+        [
+          {
+            "node": "Combine Orders with Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine Orders with Items": {
+      "main": [
+        [
+          {
+            "node": "Send Orders to Kitchen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook - Update Status": {
+      "main": [
+        [
+          {
+            "node": "Update Order Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Order Status": {
+      "main": [
+        [
+          {
+            "node": "Send Status Update Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 3,
+  "updatedAt": "2025-02-27T00:00:00.000Z",
+  "versionId": "1"
+}

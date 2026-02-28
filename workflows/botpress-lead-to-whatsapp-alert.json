@@ -1,0 +1,149 @@
+{
+  "name": "Botpress Lead to WhatsApp Alert",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "botpress-lead",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook - Botpress",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "webhookId": "botpress-lead"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-name",
+              "leftValue": "={{ $json.body.name }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            },
+            {
+              "id": "condition-phone",
+              "leftValue": "={{ $json.body.phoneNumber }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-has-details",
+      "name": "Has Name and Phone?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "phoneNumberId": "1214364327303689",
+        "recipientPhoneNumber": "971563213652",
+        "textBody": "=\ud83d\udea8 *NEW LEAD ALERT*\n\n*Name:* {{ $json.body.name }}\n*Phone:* {{ $json.body.phoneNumber }}\n*Query:* {{ $json.body.query || 'No query provided' }}\n\n*Received:* {{ $now.format('yyyy-MM-dd HH:mm:ss') }}\n*Source:* Botpress AI Agent\n\n\u2014\nPlease follow up with this lead promptly."
+      },
+      "id": "send-whatsapp",
+      "name": "WhatsApp - Alert Sales",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 2,
+      "position": [720, 200],
+      "credentials": {
+        "whatsAppApi": {
+          "id": "",
+          "name": "WhatsApp Business Cloud API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'success', message: 'WhatsApp alert sent to sales team' }) }}",
+        "options": {}
+      },
+      "id": "response-success",
+      "name": "Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [940, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'skipped', message: 'Missing required fields (name or phoneNumber)' }) }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "response-skipped",
+      "name": "Skipped Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [720, 420]
+    }
+  ],
+  "connections": {
+    "Webhook - Botpress": {
+      "main": [
+        [
+          {
+            "node": "Has Name and Phone?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Name and Phone?": {
+      "main": [
+        [
+          {
+            "node": "WhatsApp - Alert Sales",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skipped Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WhatsApp - Alert Sales": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null
+}

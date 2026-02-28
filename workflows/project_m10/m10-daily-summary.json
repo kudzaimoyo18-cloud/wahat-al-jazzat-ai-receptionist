@@ -1,0 +1,124 @@
+{
+  "name": "M10 - Daily Summary Report",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 21,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "id": "daily-trigger",
+      "name": "Every Day at 9 PM UAE",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "value": "YOUR_SPREADSHEET_ID"
+        },
+        "sheetName": {
+          "value": "Leads"
+        },
+        "options": {}
+      },
+      "id": "read-leads",
+      "name": "Read Today's Leads",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [460, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Generate daily summary stats\nconst allLeads = $input.all();\nconst now = new Date();\nconst todayStart = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Dubai' }));\ntodayStart.setHours(0, 0, 0, 0);\n\nlet todayLeads = 0;\nlet totalLeads = allLeads.length;\nlet newLeads = 0;\nlet contactedLeads = 0;\nlet convertedLeads = 0;\nlet inquiries = 0;\nlet orders = 0;\nlet complaints = 0;\nlet arabicLeads = 0;\nlet englishLeads = 0;\n\nfor (const item of allLeads) {\n  const lead = item.json;\n  const leadDate = new Date(lead.timestamp);\n  \n  if (leadDate >= todayStart) {\n    todayLeads++;\n  }\n  \n  // Status counts\n  if (lead.status === 'new') newLeads++;\n  if (lead.status === 'contacted') contactedLeads++;\n  if (lead.status === 'converted') convertedLeads++;\n  \n  // Type counts\n  if (lead.type === 'inquiry') inquiries++;\n  if (lead.type === 'order') orders++;\n  if (lead.type === 'complaint') complaints++;\n  \n  // Language counts\n  if (lead.language === 'ar') arabicLeads++;\n  if (lead.language === 'en') englishLeads++;\n}\n\nconst summary = `📊 *Daily AI Receptionist Report*\\n` +\n  `📅 ${now.toLocaleDateString('en-US', { timeZone: 'Asia/Dubai', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}\\n\\n` +\n  `*Today's Activity:*\\n` +\n  `• New leads today: ${todayLeads}\\n` +\n  `• Total leads all-time: ${totalLeads}\\n\\n` +\n  `*Lead Status:*\\n` +\n  `• 🆕 New (awaiting contact): ${newLeads}\\n` +\n  `• 📞 Contacted: ${contactedLeads}\\n` +\n  `• ✅ Converted: ${convertedLeads}\\n\\n` +\n  `*Inquiry Types:*\\n` +\n  `• 💬 General inquiries: ${inquiries}\\n` +\n  `• 🛒 Orders: ${orders}\\n` +\n  `• ⚠️ Complaints: ${complaints}\\n\\n` +\n  `*Languages:*\\n` +\n  `• 🇬🇧 English: ${englishLeads}\\n` +\n  `• 🇦🇪 Arabic: ${arabicLeads}\\n\\n` +\n  `_Report generated automatically by AI Receptionist_`;\n\nreturn [{ json: { summary, todayLeads, totalLeads } }];"
+      },
+      "id": "generate-summary",
+      "name": "Generate Daily Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "chatId": "OWNER_TELEGRAM_CHAT_ID",
+        "text": "={{ $json.summary }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "send-summary",
+      "name": "Send Summary to Owner",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [900, 300],
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every Day at 9 PM UAE": {
+      "main": [
+        [
+          {
+            "node": "Read Today's Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Today's Leads": {
+      "main": [
+        [
+          {
+            "node": "Generate Daily Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Daily Summary": {
+      "main": [
+        [
+          {
+            "node": "Send Summary to Owner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "M10",
+      "id": "m10"
+    },
+    {
+      "name": "Reporting",
+      "id": "reporting"
+    }
+  ]
+}

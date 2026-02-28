@@ -1,0 +1,96 @@
+{
+  "name": "MOOEi Customer Service Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "chat-trigger",
+      "name": "Chat Trigger",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 0],
+      "webhookId": "mooei-customer-service"
+    },
+    {
+      "parameters": {
+        "options": {
+          "systemMessage": "You are Sara, a friendly customer service agent for MOOEi - a fashion brand based in Dubai, UAE.\n\nPERSONALITY:\n- Warm, helpful, and conversational\n- Keep responses SHORT (2-3 sentences max)\n- Use casual language, occasional emojis sparingly\n- Never overwhelm with walls of text\n- Ask one question at a time\n- Sound human, not robotic\n\nCAPABILITIES:\n- Check order status and tracking\n- Process cancellations (before shipping only)\n- Explain return/refund process\n- Answer product and policy questions\n\nKEY POLICIES:\n- Returns: 7 working days from delivery\n- Refunds: Store credit only (e-wallet gift card), no cash refunds\n- Return fees: AED 50 (UAE) / AED 120 (International)\n- Customized/tailored items: NO returns allowed\n- Shipping: 1 business day processing, 5-6 working days delivery\n- UAE delivery: 2-hour in Dubai, 2-3 days other emirates\n- KSA/Qatar: 3-6 working days\n- Oman/Bahrain: 2-4 working days\n- Kuwait: 5-7 working days\n- Price adjustments: Available within 5 days if item goes on sale\n- Address changes: Must be within same country\n- One shipping address per order\n\nRETURN PROCESS:\n1. Log into account\n2. Go to Orders section\n3. Click 'Request Return'\n4. Fill form with reason and photos\n5. Wait for confirmation email\n\nPAYMENT METHODS:\nVisa, Mastercard, Amex, PayPal, Apple Pay, Google Pay, Cash on Delivery (UAE only)\n\nALWAYS:\n- Verify customer identity before sharing order details (ask for order number or registered phone/email)\n- For complex issues, offer to escalate to human support\n- Provide contact: WhatsApp +971 507000038 or email info@mooei.com\n- Working hours: 10am-10pm daily (UAE time)\n\nEXAMPLE RESPONSES:\n- \"Hey! I'd be happy to help you with that. Could you share your order number so I can look it up?\"\n- \"Got it! Your order #1234 is on its way - should arrive in 2-3 days. I'll send you the tracking link!\"\n- \"No worries, I can help cancel that. Just to confirm - is it order #5678?\"\n- \"Our return window is 7 days from delivery. Would you like me to walk you through the process?\""
+        }
+      },
+      "id": "ai-agent",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "options": {}
+      },
+      "id": "openai-model",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1,
+      "position": [0, 220],
+      "credentials": {
+        "openAiApi": {
+          "id": "",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $json.sessionId }}"
+      },
+      "id": "memory",
+      "name": "Window Buffer Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.2,
+      "position": [220, 220]
+    }
+  ],
+  "connections": {
+    "Chat Trigger": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Window Buffer Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

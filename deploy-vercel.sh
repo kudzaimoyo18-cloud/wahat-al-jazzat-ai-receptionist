@@ -1,0 +1,132 @@
+#!/bin/bash
+
+# Vercel Deployment Script for Wahat Al Jazzat AI Receptionist
+
+echo "========================================"
+echo "Wahat Al Jazzat - Vercel Deployment"
+echo "========================================"
+echo ""
+
+# Check if git is initialized
+if [ ! -d .git ]; then
+    echo "[1/5] Initializing Git repository..."
+    git init
+    if [ $? -ne 0 ]; then
+        echo "[ERROR] Failed to initialize git"
+        exit 1
+    fi
+    echo "[+] Git repository initialized"
+    echo ""
+else
+    echo "[1/5] Git repository already exists"
+    echo ""
+fi
+
+# Check if .env.local exists
+if [ ! -f .env.local ]; then
+    echo "[!] .env.local file not found"
+    echo "[!] Creating template .env.local file..."
+    cat > .env.local << 'EOF'
+# Database Configuration
+DB_HOST=your-db-host.com
+DB_USER=your-db-user
+DB_PASSWORD=your-db-password
+DB_NAME=wahat_al_jazzat
+
+# n8n Configuration
+N8N_BASE_URL=https://your-n8n-instance.com
+ANTHROPIC_API_KEY=sk-ant-your-key-here
+EOF
+    echo "[+] Created .env.local template"
+    echo ""
+    echo "[!] IMPORTANT: Edit .env.local with your actual credentials"
+    echo "[!] Then run this script again"
+    exit 0
+fi
+
+# Check if Vercel CLI is installed
+if ! command -v vercel &> /dev/null; then
+    echo "[2/5] Installing Vercel CLI..."
+    npm install -g vercel
+    if [ $? -ne 0 ]; then
+        echo "[ERROR] Failed to install Vercel CLI"
+        exit 1
+    fi
+    echo "[+] Vercel CLI installed"
+    echo ""
+else
+    echo "[2/5] Vercel CLI already installed"
+    echo ""
+fi
+
+# Check if logged in
+if ! vercel whoami &> /dev/null; then
+    echo "[!] You are not logged in to Vercel"
+    echo "[!] Please login:"
+    vercel login
+    if [ $? -ne 0 ]; then
+        echo "[ERROR] Failed to login to Vercel"
+        exit 1
+    fi
+    echo "[+] Logged in to Vercel"
+    echo ""
+else
+    echo "[3/5] Already logged in to Vercel"
+    echo ""
+fi
+
+# Add and commit files
+echo "[4/5] Preparing files for deployment..."
+git add .
+git commit -m "Deploy to Vercel - Wahat Al Jazzat AI Receptionist"
+if [ $? -ne 0 ]; then
+    echo "[!] No changes to commit or git error"
+    echo "[!] Continuing with deployment..."
+else
+    echo "[+] Files committed"
+fi
+echo ""
+
+# Deploy to Vercel
+echo "[5/5] Deploying to Vercel..."
+echo ""
+echo "This will:"
+echo "1. Create a new Vercel project (if needed)"
+echo "2. Detect and use vercel.json configuration"
+echo "3. Deploy your website"
+echo "4. Provide you with the deployment URL"
+echo ""
+echo "Press Enter to continue..."
+read
+echo ""
+
+vercel
+
+echo ""
+echo "========================================"
+echo "DEPLOYMENT COMPLETE"
+echo "========================================"
+echo ""
+echo "Next steps:"
+echo ""
+echo "1. Setup your MySQL database:"
+echo "   - Use PlanetScale (recommended): https://planetscale.com"
+echo "   - Or any MySQL provider"
+echo "   - Run: execution/database/schema.sql"
+echo ""
+echo "2. Deploy n8n workflow:"
+echo "   - Use n8n Cloud: https://n8n.io/cloud/"
+echo "   - Or self-host n8n"
+echo "   - Import: workflows/ai_receptionist_workflow.json"
+echo ""
+echo "3. Configure environment variables:"
+echo "   - Go to Vercel project settings"
+echo "   - Add all variables from .env.local"
+echo ""
+echo "4. Test your deployment:"
+echo "   - Customer: https://your-project.vercel.app/customer"
+echo "   - Kitchen: https://your-project.vercel.app/kitchen"
+echo ""
+echo "For detailed instructions, see: VERCEL_DEPLOYMENT.md"
+echo ""
+echo "========================================"

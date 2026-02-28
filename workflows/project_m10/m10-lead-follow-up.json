@@ -1,0 +1,256 @@
+{
+  "name": "M10 - Lead Follow-Up Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Every 6 Hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "value": "YOUR_SPREADSHEET_ID"
+        },
+        "sheetName": {
+          "value": "Leads"
+        },
+        "options": {}
+      },
+      "id": "read-leads",
+      "name": "Read All Leads",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [460, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Filter leads that need follow-up\nconst allItems = $input.all();\nconst now = new Date();\nconst leadsToFollowUp = [];\n\nfor (const item of allItems) {\n  const lead = item.json;\n  \n  // Skip if no phone number\n  if (!lead.phone) continue;\n  \n  // Only follow up on 'new' or 'contacted' leads\n  if (!['new', 'contacted'].includes(lead.status)) continue;\n  \n  // Skip if too many follow-ups (max 3)\n  const followUpCount = parseInt(lead.follow_up_count) || 0;\n  if (followUpCount >= 3) continue;\n  \n  // Check time since lead was created or last contacted\n  const lastContact = new Date(lead.last_follow_up || lead.timestamp);\n  if (isNaN(lastContact.getTime())) continue;\n  \n  const hoursSince = (now - lastContact) / (1000 * 60 * 60);\n  \n  // New leads: follow up after 2 hours\n  // Contacted leads: follow up after 24 hours\n  const threshold = lead.status === 'new' ? 2 : 24;\n  \n  if (hoursSince >= threshold) {\n    leadsToFollowUp.push({\n      json: {\n        ...lead,\n        follow_up_count: followUpCount,\n        follow_up_number: followUpCount + 1,\n        hours_since: Math.round(hoursSince)\n      }\n    });\n  }\n}\n\nif (leadsToFollowUp.length === 0) {\n  return [{ json: { no_leads: true } }];\n}\n\nreturn leadsToFollowUp;"
+      },
+      "id": "filter-leads",
+      "name": "Filter Leads Needing Follow-Up",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-leads",
+              "leftValue": "={{ $json.no_leads }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-has-leads",
+      "name": "Has Leads?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "options": {
+          "temperature": 0.8
+        }
+      },
+      "id": "openai-follow-up",
+      "name": "OpenAI",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1,
+      "position": [1120, 500],
+      "credentials": {
+        "openAiApi": {
+          "id": "REPLACE_WITH_YOUR_OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Generate a short, friendly WhatsApp follow-up message for a customer of [SHOP NAME] in Ajman.\n\nCustomer name: {{ $json.name }}\nTheir inquiry was about: {{ $json.inquiry }}\nInquiry type: {{ $json.type }}\nLanguage preference: {{ $json.language }}\nThis is follow-up #{{ $json.follow_up_number }}\n\nRules:\n- Write in {{ $json.language === 'ar' ? 'Arabic (Gulf dialect)' : 'English' }}\n- Keep it under 3 sentences\n- Be warm and not pushy\n- Follow-up 1: Check if they still need help\n- Follow-up 2: Mention a current offer or discount\n- Follow-up 3: Final gentle reminder, offer to help anytime\n- Include the shop name\n- Do NOT use markdown formatting — plain WhatsApp text only\n- Add 1-2 relevant emojis max",
+        "hasOutputParser": false
+      },
+      "id": "generate-message",
+      "name": "Generate Follow-Up Message",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.4,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "value": "YOUR_SPREADSHEET_ID"
+        },
+        "sheetName": {
+          "value": "Leads"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "phone": "={{ $json.phone }}",
+            "status": "contacted",
+            "follow_up_count": "={{ $json.follow_up_number }}",
+            "last_follow_up": "={{ new Date().toISOString() }}"
+          }
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED"
+        }
+      },
+      "id": "update-lead-status",
+      "name": "Update Lead Status",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1560, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "OWNER_TELEGRAM_CHAT_ID",
+        "text": "=📤 *Follow-Up Sent*\n\n👤 {{ $json.name }} ({{ $json.phone }})\n📋 Follow-up #{{ $json.follow_up_number }}\n💬 {{ $json.text }}\n\n_Auto-sent via AI Receptionist_",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "log-to-owner",
+      "name": "Log to Owner",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1560, 500],
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every 6 Hours": {
+      "main": [
+        [
+          {
+            "node": "Read All Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read All Leads": {
+      "main": [
+        [
+          {
+            "node": "Filter Leads Needing Follow-Up",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Leads Needing Follow-Up": {
+      "main": [
+        [
+          {
+            "node": "Has Leads?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Leads?": {
+      "main": [
+        [
+          {
+            "node": "Generate Follow-Up Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Generate Follow-Up Message",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Follow-Up Message": {
+      "main": [
+        [
+          {
+            "node": "Update Lead Status",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log to Owner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "M10",
+      "id": "m10"
+    },
+    {
+      "name": "Follow-Up",
+      "id": "follow-up"
+    }
+  ]
+}

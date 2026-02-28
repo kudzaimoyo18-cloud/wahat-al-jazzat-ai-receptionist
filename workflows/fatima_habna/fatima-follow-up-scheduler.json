@@ -1,0 +1,317 @@
+{
+  "name": "Fatima Habna Art Studio - Follow-Up Scheduler",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 8
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "value": "YOUR_SPREADSHEET_ID"
+        },
+        "sheetName": {
+          "value": "Leads"
+        },
+        "options": {}
+      },
+      "id": "read-all-leads",
+      "name": "Read All Leads",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [280, 0],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// ================================================\n// FILTER LEADS - Find leads needing follow-up\n// ================================================\n\nconst allItems = $input.all();\nconst now = new Date();\nconst leadsToFollowUp = [];\n\nfor (const item of allItems) {\n  const lead = item.json;\n\n  // Skip if no chat_id\n  if (!lead.chat_id) continue;\n\n  // Only follow up on warm and cold leads\n  if (!['warm', 'cold'].includes(lead.status)) continue;\n\n  // Skip if too many follow-ups already (max 3)\n  const followUpCount = parseInt(lead.follow_up_count) || 0;\n  if (followUpCount >= 3) continue;\n\n  // Check time since last contact\n  const lastContact = new Date(lead.last_contact);\n  if (isNaN(lastContact.getTime())) continue;\n\n  const hoursSinceContact = (now - lastContact) / (1000 * 60 * 60);\n\n  // Warm leads: follow up after 24 hours\n  // Cold leads: follow up after 72 hours\n  const threshold = lead.status === 'warm' ? 24 : 72;\n\n  if (hoursSinceContact >= threshold) {\n    leadsToFollowUp.push({\n      json: {\n        chat_id: lead.chat_id,\n        first_name: lead.first_name || 'there',\n        username: lead.username || '',\n        status: lead.status,\n        budget_min: lead.budget_min || '',\n        budget_max: lead.budget_max || '',\n        style_preference: lead.style_preference || '',\n        artwork_type: lead.artwork_type || '',\n        size_preference: lead.size_preference || '',\n        space_type: lead.space_type || '',\n        quantity: lead.quantity || '',\n        purpose: lead.purpose || '',\n        timeline: lead.timeline || '',\n        notes: lead.notes || '',\n        follow_up_count: followUpCount,\n        follow_up_number: followUpCount + 1,\n        hours_since_contact: Math.round(hoursSinceContact),\n        timestamp: now.toISOString()\n      }\n    });\n  }\n}\n\n// If no leads need follow-up, return a flag item\nif (leadsToFollowUp.length === 0) {\n  return [{ json: { no_leads: true, count: 0 } }];\n}\n\nreturn leadsToFollowUp;"
+      },
+      "id": "filter-leads",
+      "name": "Filter Follow-Up Leads",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [560, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "has-leads-check",
+              "leftValue": "={{ $json.no_leads }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "notTrue"
+              }
+            }
+          ]
+        }
+      },
+      "id": "if-any-leads",
+      "name": "Any Leads?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [840, 0]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// ================================================\n// BUILD FOLLOW-UP PROMPT for each lead\n// ================================================\n\nconst lead = $json;\n\nconst systemPrompt = `You are Noor from Fatima Habna Art Studio. Write a brief, natural follow-up message for a potential art client on Telegram.\n\nRules:\n- Keep it to 1-2 sentences\n- Sound casual and friendly, not salesy\n- Reference something specific from their art preferences if available\n- Do not be pushy\n- Vary your approach based on the follow-up number\n- Never say you are an AI\n- Never use the word assist\n- Detect language and respond in same language (Arabic, English, or Russian)\n\nFollow-up styles:\nFollow-up 1: Light check-in, mention something relevant to their art interest - perhaps a new piece Fatima completed in a similar style\nFollow-up 2: Share an insight about a trending art style in Dubai or mention a recent installation that fits their taste\nFollow-up 3: Final gentle nudge, leave the door open warmly and say no worries if the timing is not right\n\nRespond with ONLY the message text, nothing else. No quotes around it.`;\n\nlet userPrompt = 'Follow-up #' + lead.follow_up_number + ' for ' + lead.first_name + '.\\n';\nuserPrompt += 'Status: ' + lead.status + '\\n';\nif (lead.style_preference) userPrompt += 'Style preference: ' + lead.style_preference + '\\n';\nif (lead.artwork_type) userPrompt += 'Artwork type: ' + lead.artwork_type + '\\n';\nif (lead.size_preference) userPrompt += 'Size preference: ' + lead.size_preference + '\\n';\nif (lead.space_type) userPrompt += 'Space type: ' + lead.space_type + '\\n';\nif (lead.budget_min || lead.budget_max) userPrompt += 'Budget: AED ' + (lead.budget_min || '?') + ' - ' + (lead.budget_max || '?') + '\\n';\nif (lead.purpose) userPrompt += 'Purpose: ' + lead.purpose + '\\n';\nif (lead.timeline) userPrompt += 'Timeline: ' + lead.timeline + '\\n';\nif (lead.notes) userPrompt += 'Notes: ' + lead.notes + '\\n';\nuserPrompt += 'Last spoke: ' + lead.hours_since_contact + ' hours ago';\n\nconst requestBody = {\n  model: 'gpt-4o-mini',\n  messages: [\n    { role: 'system', content: systemPrompt },\n    { role: 'user', content: userPrompt }\n  ],\n  temperature: 0.8,\n  max_tokens: 150\n};\n\nreturn {\n  json: {\n    ...lead,\n    requestBody\n  }\n};"
+      },
+      "id": "build-followup-prompt",
+      "name": "Build Follow-Up Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, -100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.requestBody) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "generate-followup",
+      "name": "Generate Follow-Up",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1400, -100],
+      "credentials": {
+        "openAiApi": {
+          "id": "",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Extract the follow-up message text from OpenAI response\nconst openaiResponse = $json;\nconst leadData = $('Build Follow-Up Prompt').first().json;\n\nlet followUpMessage = '';\ntry {\n  followUpMessage = openaiResponse.choices[0].message.content.trim();\n} catch(e) {\n  followUpMessage = 'Hey ' + (leadData.first_name || 'there') + '! Just checking in - still thinking about that art piece? Let me know if I can help with anything.';\n}\n\nreturn {\n  json: {\n    chat_id: leadData.chat_id,\n    first_name: leadData.first_name,\n    follow_up_number: leadData.follow_up_number,\n    follow_up_count: leadData.follow_up_count,\n    followUpMessage,\n    timestamp: leadData.timestamp\n  }\n};"
+      },
+      "id": "parse-followup",
+      "name": "Parse Follow-Up",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1680, -100]
+    },
+    {
+      "parameters": {
+        "operation": "sendMessage",
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.followUpMessage }}",
+        "additionalFields": {}
+      },
+      "id": "send-followup",
+      "name": "Send Follow-Up",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1960, -250],
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "value": "YOUR_SPREADSHEET_ID"
+        },
+        "sheetName": {
+          "value": "Conversations"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{ $json.timestamp }}",
+            "chat_id": "={{ $json.chat_id }}",
+            "direction": "outbound",
+            "message": "={{ $json.followUpMessage }}",
+            "ai_extracted": "follow-up"
+          }
+        },
+        "options": {}
+      },
+      "id": "log-followup",
+      "name": "Log Follow-Up",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1960, -50],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "value": "YOUR_SPREADSHEET_ID"
+        },
+        "sheetName": {
+          "value": "Leads"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "chat_id": "={{ $json.chat_id }}",
+            "follow_up_count": "={{ $json.follow_up_number }}",
+            "last_contact": "={{ $json.timestamp }}"
+          }
+        },
+        "columnToMatchOn": "chat_id",
+        "valueToMatchOn": "={{ $json.chat_id }}",
+        "options": {}
+      },
+      "id": "update-followup-count",
+      "name": "Update Lead After Follow-Up",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1960, 150],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Read All Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read All Leads": {
+      "main": [
+        [
+          {
+            "node": "Filter Follow-Up Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Follow-Up Leads": {
+      "main": [
+        [
+          {
+            "node": "Any Leads?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any Leads?": {
+      "main": [
+        [
+          {
+            "node": "Build Follow-Up Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Build Follow-Up Prompt": {
+      "main": [
+        [
+          {
+            "node": "Generate Follow-Up",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Follow-Up": {
+      "main": [
+        [
+          {
+            "node": "Parse Follow-Up",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Follow-Up": {
+      "main": [
+        [
+          {
+            "node": "Send Follow-Up",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log Follow-Up",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Update Lead After Follow-Up",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

@@ -1,0 +1,176 @@
+{
+  "name": "M10 - Business Hours Router & After-Hours Handler",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "m10-hours-check",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Hours Check Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "m10-hours-check"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Check if current time is within business hours (UAE timezone)\nconst now = new Date();\n\n// Convert to UAE time (UTC+4)\nconst uaeTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Dubai' }));\nconst hour = uaeTime.getHours();\nconst day = uaeTime.getDay(); // 0=Sunday, 5=Friday, 6=Saturday\n\n// Business hours configuration\n// Saturday-Thursday: 9 AM - 10 PM\n// Friday: 2 PM - 10 PM (after Jummah)\nlet isOpen = false;\nlet nextOpenTime = '';\n\nif (day === 5) {\n  // Friday\n  isOpen = hour >= 14 && hour < 22;\n  if (hour < 14) nextOpenTime = '2:00 PM today';\n  else if (hour >= 22) nextOpenTime = '9:00 AM tomorrow';\n} else {\n  // Saturday - Thursday\n  isOpen = hour >= 9 && hour < 22;\n  if (hour < 9) nextOpenTime = '9:00 AM today';\n  else if (hour >= 22) {\n    nextOpenTime = day === 4 ? '2:00 PM tomorrow (Friday)' : '9:00 AM tomorrow';\n  }\n}\n\nreturn [{\n  json: {\n    isOpen,\n    currentTime: uaeTime.toLocaleString('en-US', { timeZone: 'Asia/Dubai' }),\n    hour,\n    day,\n    dayName: ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][day],\n    nextOpenTime,\n    message: $input.all()[0].json.body?.message || '',\n    phone: $input.all()[0].json.body?.phone || '',\n    name: $input.all()[0].json.body?.name || ''\n  }\n}];"
+      },
+      "id": "check-hours",
+      "name": "Check Business Hours (UAE)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "is-open",
+              "leftValue": "={{ $json.isOpen }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-open",
+      "name": "Shop Open?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={\"route\": \"ai-receptionist\", \"isOpen\": true}",
+        "options": {}
+      },
+      "id": "route-to-ai",
+      "name": "Route to AI Receptionist",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={\"route\": \"after-hours\", \"isOpen\": false, \"message\": \"Thank you for reaching out to [SHOP NAME]! We're currently closed but will get back to you when we open at {{ $json.nextOpenTime }}. Your message has been saved and our team will respond first thing! 🕐\", \"messageAr\": \"شكراً لتواصلك مع [SHOP NAME]! نحن حالياً مغلقين لكن سنرد عليك لما نفتح الساعة {{ $json.nextOpenTime }}. رسالتك محفوظة عندنا وفريقنا بيتواصل معاك أول ما نفتح! 🕐\"}",
+        "options": {}
+      },
+      "id": "after-hours-response",
+      "name": "After Hours Auto-Reply",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [900, 420]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "value": "YOUR_SPREADSHEET_ID"
+        },
+        "sheetName": {
+          "value": "After Hours Messages"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "phone": "={{ $json.phone }}",
+            "name": "={{ $json.name }}",
+            "message": "={{ $json.message }}",
+            "received_at": "={{ $json.currentTime }}",
+            "status": "pending_reply"
+          }
+        },
+        "options": {}
+      },
+      "id": "log-after-hours",
+      "name": "Log After-Hours Message",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1120, 420],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Hours Check Webhook": {
+      "main": [
+        [
+          {
+            "node": "Check Business Hours (UAE)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Business Hours (UAE)": {
+      "main": [
+        [
+          {
+            "node": "Shop Open?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shop Open?": {
+      "main": [
+        [
+          {
+            "node": "Route to AI Receptionist",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "After Hours Auto-Reply",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log After-Hours Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "M10",
+      "id": "m10"
+    },
+    {
+      "name": "Business Hours",
+      "id": "hours"
+    }
+  ]
+}

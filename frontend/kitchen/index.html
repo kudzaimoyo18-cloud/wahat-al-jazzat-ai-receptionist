@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kitchen Display - Wahat Al Jazzat</title>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-red: #C8102E;
+            --primary-orange: #FF6B35;
+            --gold: #D4AF37;
+            --cream: #FFF8E7;
+            --dark: #1A1A1A;
+            --success: #10B981;
+            --warning: #F59E0B;
+            --danger: #EF4444;
+            --white: #FFFFFF;
+            --shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #FFF8E7 0%, #FFE4C4 100%);
+            min-height: 100vh;
+            color: var(--dark);
+        }
+
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, var(--primary-red) 0%, var(--primary-orange) 100%);
+            color: var(--white);
+            padding: 1.5rem 2rem;
+            box-shadow: var(--shadow);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-family: 'Playfair Display', serif;
+            font-size: 2rem;
+            font-weight: 700;
+        }
+
+        .header-stats {
+            display: flex;
+            gap: 2rem;
+            font-size: 0.9rem;
+        }
+
+        .stat {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            opacity: 0.9;
+            text-transform: uppercase;
+        }
+
+        /* Main Container */
+        .container {
+            max-width: 1400px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+
+        /* Filter Tabs */
+        .filters {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .filter-btn {
+            background: var(--white);
+            border: 2px solid var(--primary-orange);
+            color: var(--primary-orange);
+            padding: 0.75rem 1.5rem;
+            border-radius: 25px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .filter-btn.active,
+        .filter-btn:hover {
+            background: linear-gradient(135deg, var(--primary-red) 0%, var(--primary-orange) 100%);
+            color: var(--white);
+        }
+
+        /* Orders Grid */
+        .orders-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+            gap: 1.5rem;
+        }
+
+        /* Order Card */
+        .order-card {
+            background: var(--white);
+            border-radius: 16px;
+            box-shadow: var(--shadow);
+            overflow: hidden;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .order-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+        }
+
+        .order-header {
+            padding: 1.5rem;
+            border-bottom: 3px solid var(--gold);
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+        }
+
+        .order-id {
+            font-family: 'Playfair Display', serif;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary-red);
+        }
+
+        .order-time {
+            font-size: 0.85rem;
+            color: var(--gray);
+            margin-top: 0.25rem;
+        }
+
+        .order-status {
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+        }
+
+        .status-pending {
+            background: #FEF3C7;
+            color: var(--warning);
+        }
+
+        .status-preparing {
+            background: #DBEAFE;
+            color: #3B82F6;
+        }
+
+        .status-ready {
+            background: #D1FAE5;
+            color: var(--success);
+        }
+
+        .order-customer {
+            padding: 1rem 1.5rem;
+            background: var(--cream);
+            border-bottom: 2px solid var(--gold);
+        }
+
+        .customer-name {
+            font-weight: 600;
+            color: var(--dark);
+        }
+
+        .customer-phone {
+            font-size: 0.85rem;
+            color: var(--gray);
+            margin-top: 0.25rem;
+        }
+
+        .order-items {
+            padding: 1.5rem;
+        }
+
+        .order-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 0;
+            border-bottom: 1px dashed #E5E7EB;
+        }
+
+        .order-item:last-child {
+            border-bottom: none;
+        }
+
+        .item-quantity {
+            background: var(--primary-red);
+            color: var(--white);
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.9rem;
+            margin-right: 1rem;
+        }
+
+        .item-details {
+            flex: 1;
+        }
+
+        .item-name {
+            font-weight: 600;
+            color: var(--dark);
+        }
+
+        .item-price {
+            font-size: 0.85rem;
+            color: var(--gray);
+            margin-top: 0.25rem;
+        }
+
+        .item-instructions {
+            font-size: 0.75rem;
+            color: var(--warning);
+            font-style: italic;
+            margin-top: 0.25rem;
+        }
+
+        .order-footer {
+            padding: 1rem 1.5rem;
+            background: var(--cream);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .order-total {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--primary-red);
+        }
+
+        .order-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .action-btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 0.85rem;
+        }
+
+        .btn-prepare {
+            background: #3B82F6;
+            color: var(--white);
+        }
+
+        .btn-prepare:hover {
+            background: #2563EB;
+        }
+
+        .btn-ready {
+            background: var(--success);
+            color: var(--white);
+        }
+
+        .btn-ready:hover {
+            background: #059669;
+        }
+
+        .btn-complete {
+            background: var(--primary-orange);
+            color: var(--white);
+        }
+
+        .btn-complete:hover {
+            background: #EA580C;
+        }
+
+        /* Special Instructions */
+        .special-instructions {
+            padding: 1rem 1.5rem;
+            background: #FEF3C7;
+            border-left: 4px solid var(--warning);
+        }
+
+        .special-instructions-title {
+            font-weight: 600;
+            color: var(--warning);
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            margin-bottom: 0.5rem;
+        }
+
+        /* Time Badge */
+        .time-badge {
+            display: inline-block;
+            background: var(--danger);
+            color: var(--white);
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+            background: var(--white);
+            border-radius: 16px;
+            box-shadow: var(--shadow);
+        }
+
+        .empty-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+
+        .empty-text {
+            font-size: 1.2rem;
+            color: var(--gray);
+        }
+
+        /* Notifications */
+        .notification {
+            position: fixed;
+            top: 100px;
+            right: 20px;
+            background: var(--white);
+            padding: 1rem 1.5rem;
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            border-left: 4px solid var(--success);
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            z-index: 1000;
+            animation: slideInRight 0.3s ease;
+        }
+
+        @keyframes slideInRight {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .orders-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .header-stats {
+                gap: 1rem;
+            }
+
+            .stat-value {
+                font-size: 1.2rem;
+            }
+
+            .logo {
+                font-size: 1.5rem;
+            }
+        }
+
+        /* Loading */
+        .loading {
+            text-align: center;
+            padding: 4rem;
+            font-size: 1.2rem;
+            color: var(--gray);
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-content">
+            <div>
+                <div class="logo">🍳 Kitchen Display</div>
+                <div style="font-size: 0.85rem; opacity: 0.9; margin-top: 0.25rem;">
+                    Wahat Al Jazzat Cafeteria
+                </div>
+            </div>
+            <div class="header-stats">
+                <div class="stat">
+                    <div class="stat-value" id="stat-pending">0</div>
+                    <div class="stat-label">Pending</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value" id="stat-preparing">0</div>
+                    <div class="stat-label">Preparing</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value" id="stat-ready">0</div>
+                    <div class="stat-label">Ready</div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="filters">
+            <button class="filter-btn active" onclick="filterOrders('all')">All Orders</button>
+            <button class="filter-btn" onclick="filterOrders('pending')">⏳ Pending</button>
+            <button class="filter-btn" onclick="filterOrders('preparing')">👨‍🍳 Preparing</button>
+            <button class="filter-btn" onclick="filterOrders('ready')">✅ Ready</button>
+        </div>
+
+        <div id="orders-container" class="orders-grid">
+            <div class="loading">Loading orders...</div>
+        </div>
+    </div>
+
+    <script>
+        // API Base URL - will be replaced by Vercel automatically
+        const API_BASE = window.location.hostname === 'localhost'
+            ? 'http://localhost:8000'
+            : window.location.origin;
+        let currentFilter = 'all';
+        let orders = [];
+        let pollingInterval = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadOrders();
+            // Poll for updates every 5 seconds (Vercel doesn't support WebSockets)
+            startPolling();
+        });
+
+        // Load Orders
+        async function loadOrders() {
+            try {
+                const response = await fetch(`${API_BASE}/orders`);
+                const data = await response.json();
+                orders = data.orders;
+                renderOrders();
+                updateStats();
+            } catch (error) {
+                console.error('Error loading orders:', error);
+                document.getElementById('orders-container').innerHTML =
+                    '<div class="empty-state"><div class="empty-icon">❌</div><div class="empty-text">Error loading orders. Please refresh.</div></div>';
+            }
+        }
+
+        // Start Polling for Vercel (WebSockets not supported)
+        function startPolling() {
+            // Poll every 5 seconds
+            pollingInterval = setInterval(() => {
+                loadOrders();
+            }, 5000);
+        }
+
+        // Filter Orders
+        function filterOrders(status) {
+            currentFilter = status;
+
+            // Update button states
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            renderOrders();
+        }
+
+        // Render Orders
+        function renderOrders() {
+            const container = document.getElementById('orders-container');
+
+            const filteredOrders = currentFilter === 'all'
+                ? orders
+                : orders.filter(order => order.order_status === currentFilter);
+
+            if (filteredOrders.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state" style="grid-column: 1 / -1;">
+                        <div class="empty-icon">🍽️</div>
+                        <div class="empty-text">No ${currentFilter === 'all' ? '' : currentFilter} orders to display</div>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = filteredOrders.map(order => createOrderCard(order)).join('');
+        }
+
+        // Create Order Card HTML
+        function createOrderCard(order) {
+            const timeAgo = getTimeAgo(new Date(order.created_at));
+            const isUrgent = (Date.now() - new Date(order.created_at)) > 15 * 60 * 1000; // 15 minutes
+
+            return `
+                <div class="order-card" data-order-id="${order.id}">
+                    <div class="order-header">
+                        <div>
+                            <div class="order-id">#${order.id}</div>
+                            <div class="order-time">${timeAgo} ${isUrgent ? '<span class="time-badge">Urgent</span>' : ''}</div>
+                        </div>
+                        <span class="order-status status-${order.order_status}">
+                            ${order.order_status}
+                        </span>
+                    </div>
+
+                    ${order.special_requests ? `
+                        <div class="special-instructions">
+                            <div class="special-instructions-title">📝 Special Instructions</div>
+                            ${order.special_requests}
+                        </div>
+                    ` : ''}
+
+                    <div class="order-customer">
+                        <div class="customer-name">${order.customer_name || 'Guest'}</div>
+                        <div class="customer-phone">${order.phone_number || 'No phone'}</div>
+                    </div>
+
+                    <div class="order-items">
+                        ${order.items.map(item => `
+                            <div class="order-item">
+                                <div class="item-quantity">${item.quantity}</div>
+                                <div class="item-details">
+                                    <div class="item-name">${item.item_name}</div>
+                                    <div class="item-price">${item.price.toFixed(2)} BD</div>
+                                    ${item.special_instructions ? `
+                                        <div class="item-instructions">ℹ️ ${item.special_instructions}</div>
+                                    ` : ''}
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+
+                    <div class="order-footer">
+                        <div class="order-total">${order.total_amount.toFixed(2)} BD</div>
+                        <div class="order-actions">
+                            ${order.order_status === 'pending' ? `
+                                <button class="action-btn btn-prepare" onclick="updateStatus(${order.id}, 'preparing')">
+                                    👨‍🍳 Start Preparing
+                                </button>
+                            ` : ''}
+
+                            ${order.order_status === 'preparing' ? `
+                                <button class="action-btn btn-ready" onclick="updateStatus(${order.id}, 'ready')">
+                                    ✅ Mark Ready
+                                </button>
+                            ` : ''}
+
+                            ${order.order_status === 'ready' ? `
+                                <button class="action-btn btn-complete" onclick="updateStatus(${order.id}, 'completed')">
+                                    ✓ Complete
+                                </button>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Update Order Status
+        async function updateStatus(orderId, newStatus) {
+            try {
+                const response = await fetch(`${API_BASE}/orders/${orderId}/status`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        orderId: orderId,
+                        status: newStatus
+                    })
+                });
+
+                if (response.ok) {
+                    showNotification(`Order #${orderId} updated to ${newStatus}`);
+                    loadOrders();
+                } else {
+                    alert('Failed to update order status');
+                }
+            } catch (error) {
+                console.error('Error updating status:', error);
+                alert('Error updating order status');
+            }
+        }
+
+        // Update Statistics
+        function updateStats() {
+            document.getElementById('stat-pending').textContent =
+                orders.filter(o => o.order_status === 'pending').length;
+            document.getElementById('stat-preparing').textContent =
+                orders.filter(o => o.order_status === 'preparing').length;
+            document.getElementById('stat-ready').textContent =
+                orders.filter(o => o.order_status === 'ready').length;
+        }
+
+        // Show Notification
+        function showNotification(message) {
+            const notification = document.createElement('div');
+            notification.className = 'notification';
+            notification.innerHTML = `
+                <span style="font-size: 1.5rem;">🔔</span>
+                <span>${message}</span>
+            `;
+            document.body.appendChild(notification);
+
+            setTimeout(() => {
+                notification.style.animation = 'slideInRight 0.3s ease reverse';
+                setTimeout(() => notification.remove(), 300);
+            }, 3000);
+        }
+
+        // Get Time Ago String
+        function getTimeAgo(date) {
+            const seconds = Math.floor((Date.now() - date) / 1000);
+
+            if (seconds < 60) return 'Just now';
+            if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+            if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+            return `${Math.floor(seconds / 86400)}d ago`;
+        }
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (pollingInterval) {
+                clearInterval(pollingInterval);
+            }
+        });
+    </script>
+</body>
+</html>

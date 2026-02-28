@@ -1,0 +1,116 @@
+{
+  "name": "Lead Dashboard API",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "lead-dashboard",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "lead-dashboard"
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "value": "YOUR_SPREADSHEET_ID"
+        },
+        "sheetName": {
+          "value": "Leads"
+        },
+        "options": {}
+      },
+      "id": "read-leads",
+      "name": "Read All Leads",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [280, 0],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// ================================================\n// AGGREGATE STATS - Build dashboard data\n// ================================================\n\nconst allItems = $input.all();\nconst leads = allItems.map(i => i.json).filter(l => l.chat_id);\n\n// Count by status\nconst statusCounts = {\n  new: 0,\n  cold: 0,\n  warm: 0,\n  hot: 0,\n  booked: 0,\n  handed_off: 0\n};\n\nfor (const lead of leads) {\n  if (statusCounts.hasOwnProperty(lead.status)) {\n    statusCounts[lead.status]++;\n  }\n}\n\n// Recent leads (last 10)\nconst recentLeads = leads\n  .filter(l => l.last_contact)\n  .sort((a, b) => new Date(b.last_contact) - new Date(a.last_contact))\n  .slice(0, 10)\n  .map(l => ({\n    name: l.first_name || 'Unknown',\n    username: l.username || '',\n    status: l.status,\n    budget: (l.budget_min || l.budget_max) ? 'AED ' + (l.budget_min || '?') + ' - ' + (l.budget_max || '?') : 'Not specified',\n    area: l.location_preference || 'Not specified',\n    property_type: l.property_type || 'Not specified',\n    timeline: l.timeline || 'Not specified',\n    purpose: l.purpose || 'Not specified',\n    messages: parseInt(l.message_count) || 0,\n    last_contact: l.last_contact,\n    first_contact: l.first_contact\n  }));\n\n// Hot leads (priority list)\nconst hotLeads = leads\n  .filter(l => l.status === 'hot')\n  .map(l => ({\n    name: l.first_name || 'Unknown',\n    username: l.username ? '@' + l.username : 'N/A',\n    budget: (l.budget_min || l.budget_max) ? 'AED ' + (l.budget_min || '?') + ' - ' + (l.budget_max || '?') : 'Not specified',\n    area: l.location_preference || 'Not specified',\n    timeline: l.timeline || 'Not specified',\n    last_contact: l.last_contact\n  }));\n\n// Conversion metrics\nconst totalLeads = leads.length;\nconst convertedLeads = leads.filter(l => ['booked', 'handed_off'].includes(l.status)).length;\nconst conversionRate = totalLeads > 0 ? ((convertedLeads / totalLeads) * 100).toFixed(1) : '0.0';\n\n// Average messages per lead\nconst totalMessages = leads.reduce((sum, l) => sum + (parseInt(l.message_count) || 0), 0);\nconst avgMessages = totalLeads > 0 ? (totalMessages / totalLeads).toFixed(1) : '0';\n\n// Leads today\nconst today = new Date();\ntoday.setHours(0, 0, 0, 0);\nconst leadsToday = leads.filter(l => {\n  const fc = new Date(l.first_contact);\n  return fc >= today;\n}).length;\n\n// Leads this week\nconst weekAgo = new Date();\nweekAgo.setDate(weekAgo.getDate() - 7);\nconst leadsThisWeek = leads.filter(l => {\n  const fc = new Date(l.first_contact);\n  return fc >= weekAgo;\n}).length;\n\nconst dashboard = {\n  summary: {\n    total_leads: totalLeads,\n    leads_today: leadsToday,\n    leads_this_week: leadsThisWeek,\n    conversion_rate: conversionRate + '%',\n    avg_messages_per_lead: avgMessages,\n    total_messages: totalMessages\n  },\n  by_status: statusCounts,\n  hot_leads: hotLeads,\n  recent_leads: recentLeads,\n  generated_at: new Date().toISOString()\n};\n\nreturn [{ json: dashboard }];"
+      },
+      "id": "aggregate-stats",
+      "name": "Aggregate Stats",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [560, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond-webhook",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [840, 0]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Read All Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read All Leads": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Stats": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

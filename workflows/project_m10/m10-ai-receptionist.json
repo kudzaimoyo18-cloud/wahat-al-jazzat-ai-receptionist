@@ -1,0 +1,276 @@
+{
+  "name": "M10 - AI Receptionist (WhatsApp + Web Chat)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "m10-receptionist",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "webhook-trigger",
+      "name": "Chat Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "m10-receptionist"
+    },
+    {
+      "parameters": {
+        "options": {
+          "systemMessage": "You are the friendly AI receptionist for [SHOP NAME] in Ajman, UAE.\n\nPERSONALITY:\n- Warm, professional, and helpful\n- Keep responses SHORT (2-3 sentences max)\n- Respond in the SAME LANGUAGE the customer uses (Arabic or English)\n- Use casual but professional tone\n- Never overwhelm with walls of text\n- Sound human, not robotic\n\nCAPABILITIES:\n1. Answer FAQs (hours, location, products, prices)\n2. Take product inquiries and check availability\n3. Book appointments or store visits\n4. Handle complaints (apologize, escalate to owner)\n5. Collect customer info for follow-up\n6. Share promotions and current offers\n\nSHOP INFO:\n- Name: [SHOP NAME]\n- Location: [FULL ADDRESS], Ajman, UAE\n- Phone: [PHONE NUMBER]\n- WhatsApp: [WHATSAPP NUMBER]\n- Working Hours: [e.g., 9 AM - 10 PM, Saturday - Thursday]\n- Friday Hours: [e.g., 2 PM - 10 PM]\n- Products/Services: [DESCRIBE WHAT THE SHOP SELLS]\n- Payment: Cash, Card, Apple Pay\n- Delivery: [Available/Not available] within Ajman\n\nORDER/INQUIRY PROCESS:\n1. Greet the customer warmly\n2. Understand what they need\n3. Provide relevant info (price, availability, etc.)\n4. If they want to order/book: collect name, phone, item details\n5. Confirm the order/booking\n6. When confirmed, output on a new line:\n[LEAD_CAPTURED]{\"name\": \"Customer Name\", \"phone\": \"number\", \"inquiry\": \"what they asked about\", \"type\": \"order/inquiry/complaint/booking\", \"language\": \"en/ar\", \"timestamp\": \"ISO date\"}[/LEAD_CAPTURED]\n\nESCALATION RULES:\n- Complaints about product quality -> Apologize + escalate to owner\n- Price negotiations -> \"Let me check with the manager and get back to you\"\n- Custom/bulk orders -> Collect details + escalate\n- Anything you're unsure about -> \"Let me connect you with our team\" + share phone number\n\nEXAMPLE RESPONSES (English):\n- \"Hi there! Welcome to [SHOP NAME] 👋 How can I help you today?\"\n- \"Great choice! That item is available. Would you like to visit us or shall I arrange delivery?\"\n- \"Our store is open until 10 PM today. We're located in [AREA], Ajman — I can send you the Google Maps link!\"\n\nEXAMPLE RESPONSES (Arabic):\n- \"أهلاً وسهلاً! كيف أقدر أساعدك اليوم؟\"\n- \"متوفر عندنا! تبي تمر علينا المحل ولا نوصله لك؟\"\n- \"محلنا مفتوح لين الساعة 10 بالليل. موقعنا في عجمان — أرسلك اللوكيشن؟\"\n\nALWAYS:\n- Be respectful and patient\n- If customer is angry, acknowledge their frustration first\n- End conversations with \"Is there anything else I can help with?\"\n- Never make up information about products or prices you don't know\n- For unknown prices: \"Let me check the latest price and get back to you in a moment\""
+        }
+      },
+      "id": "ai-agent",
+      "name": "AI Receptionist",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [620, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "options": {
+          "temperature": 0.7
+        }
+      },
+      "id": "openai-chat",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1,
+      "position": [620, 520],
+      "credentials": {
+        "openAiApi": {
+          "id": "REPLACE_WITH_YOUR_OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $json.body.sessionId || $json.body.phone || 'default' }}"
+      },
+      "id": "memory",
+      "name": "Window Buffer Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [820, 520]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.output }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond-to-webhook",
+      "name": "Respond to Chat",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Extract lead data if AI captured it\nconst output = $input.all()[0].json.output || '';\nconst leadMatch = output.match(/\\[LEAD_CAPTURED\\](.*?)\\[\\/LEAD_CAPTURED\\]/s);\n\nif (leadMatch) {\n  try {\n    const leadData = JSON.parse(leadMatch[1]);\n    return [{ json: { ...leadData, captured: true } }];\n  } catch (e) {\n    return [{ json: { captured: false } }];\n  }\n}\n\nreturn [{ json: { captured: false } }];"
+      },
+      "id": "extract-lead",
+      "name": "Extract Lead Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 500]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "lead-check",
+              "leftValue": "={{ $json.captured }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-lead",
+      "name": "Lead Captured?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1120, 500]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "value": "YOUR_SPREADSHEET_ID"
+        },
+        "sheetName": {
+          "value": "Leads"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "name": "={{ $json.name }}",
+            "phone": "={{ $json.phone }}",
+            "inquiry": "={{ $json.inquiry }}",
+            "type": "={{ $json.type }}",
+            "language": "={{ $json.language }}",
+            "timestamp": "={{ $json.timestamp }}",
+            "status": "new",
+            "source": "AI Receptionist"
+          }
+        },
+        "options": {}
+      },
+      "id": "save-lead",
+      "name": "Save Lead to Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1340, 400],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "OWNER_TELEGRAM_CHAT_ID",
+        "text": "=🔔 *New Lead from AI Receptionist*\n\n👤 *Name:* {{ $json.name }}\n📞 *Phone:* {{ $json.phone }}\n💬 *Inquiry:* {{ $json.inquiry }}\n📋 *Type:* {{ $json.type }}\n🌐 *Language:* {{ $json.language === 'ar' ? 'Arabic' : 'English' }}\n⏰ *Time:* {{ $json.timestamp }}\n\n_Reply to the customer on WhatsApp_",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "notify-owner",
+      "name": "Notify Owner (Telegram)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1340, 600],
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Chat Webhook": {
+      "main": [
+        [
+          {
+            "node": "AI Receptionist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Receptionist": {
+      "main": [
+        [
+          {
+            "node": "Respond to Chat",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Extract Lead Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Receptionist",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Window Buffer Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Receptionist",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Lead Data": {
+      "main": [
+        [
+          {
+            "node": "Lead Captured?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead Captured?": {
+      "main": [
+        [
+          {
+            "node": "Save Lead to Sheet",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Notify Owner (Telegram)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "M10",
+      "id": "m10"
+    },
+    {
+      "name": "AI Receptionist",
+      "id": "ai-receptionist"
+    }
+  ]
+}

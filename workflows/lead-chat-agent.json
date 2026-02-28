@@ -1,0 +1,495 @@
+{
+  "name": "Lead Chat Agent - Dubai Properties",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": ["message"],
+        "additionalFields": {}
+      },
+      "id": "telegram-trigger",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 0],
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "value": "YOUR_SPREADSHEET_ID"
+        },
+        "sheetName": {
+          "value": "Leads"
+        },
+        "options": {}
+      },
+      "id": "read-leads",
+      "name": "Read Leads",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [280, 0],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "value": "YOUR_SPREADSHEET_ID"
+        },
+        "sheetName": {
+          "value": "Conversations"
+        },
+        "options": {}
+      },
+      "id": "read-conversations",
+      "name": "Read Conversations",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [560, 0],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// ============================================\n// BUILD REQUEST - Assembles the OpenAI API call\n// ============================================\n\n// Get trigger data\nconst trigger = $('Telegram Trigger').first().json;\nconst chatId = String(trigger.message.chat.id);\nconst messageText = trigger.message.text || '';\nconst firstName = trigger.message.from.first_name || 'there';\nconst username = trigger.message.from.username || '';\n\n// Find existing lead in Leads sheet\nconst allLeads = $('Read Leads').all().map(i => i.json);\nconst existingLead = allLeads.find(l => String(l.chat_id) === chatId);\nconst isNewLead = !existingLead || !existingLead.chat_id;\n\n// Get conversation history for this chat_id\nconst allConvos = $('Read Conversations').all().map(i => i.json);\nconst myHistory = allConvos\n  .filter(c => String(c.chat_id) === chatId)\n  .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))\n  .slice(-20);\n\n// ---- SYSTEM PROMPT ----\nconst systemPrompt = `You are Aisha, a real estate consultant at Dubai Premier Properties. You chat with clients on Telegram who are interested in buying or renting property in Dubai. You have 8 years of experience in the Dubai market.\n\nHOW YOU TALK:\n- Keep it casual and warm, like texting a friend who happens to know everything about Dubai real estate\n- Short messages. 2-4 sentences max. Nobody reads novels on Telegram\n- Use line breaks between thoughts\n- Never use bullet points or numbered lists in chat\n- Occasionally use simple expressions like absolutely, great choice, love that area\n- Never say I am an AI or as an AI or anything like that\n- Never use the word assist - say help instead\n- Do not be overly enthusiastic or salesy. Be real.\n- Mirror the client language style\n\nYOUR GOAL (in order):\n1. Build rapport - make them feel heard\n2. Understand what they want (budget, area, type, timeline, purpose)\n3. Answer questions honestly and knowledgeably\n4. If they seem ready, suggest a viewing or connect with a senior consultant\n5. If not ready, keep the door open warmly\n\nQUALIFYING QUESTIONS (ask naturally, not like a form):\n- What kind of property are you looking at?\n- Any areas you are drawn to?\n- What is your budget range?\n- Is this for living in or as an investment?\n- When are you looking to make a move?\n\nMARKET KNOWLEDGE:\n- Dubai Marina: Studios from AED 800K, 1BR from AED 1.2M, 2BR from AED 2M+\n- Downtown Dubai / Burj Khalifa area: 1BR from AED 1.5M, 2BR from AED 2.5M+\n- JBR: 1BR from AED 1.3M, 2BR from AED 2.2M+\n- Palm Jumeirah: 1BR from AED 1.8M, 2BR from AED 3M+, Villas from AED 15M+\n- Business Bay: Studios from AED 700K, 1BR from AED 1M, 2BR from AED 1.8M+\n- JVC: Studios from AED 450K, 1BR from AED 700K (affordable option)\n- Dubai Hills Estate: 3BR villas from AED 3.5M, apartments from AED 1M\n- Creek Harbour: 1BR from AED 1.2M, 2BR from AED 2M+\n- Rental yields: 5-8% average, higher in affordable areas\n- Off-plan: 10-20% cheaper, payment plans available (60/40 or 80/20)\n- Transaction costs: ~8% total (4% DLD fee, 2% agency, ~2% other)\n- No property tax. No income tax. Major draw for investors.\n- Golden visa for property purchases above AED 2M\n\nWHEN TO SUGGEST BOOKING:\nIf client has shared budget + area + timeline within 3 months, suggest: I could set up a couple of viewings for you this week if you are free? No pressure at all.\n\nWHEN TO HAND OFF:\nIf client asks for specific unit availability, contract details, payment plans, or legal questions - say: Let me connect you with our senior consultant directly for that - they handle all the details and can give you exact figures.\n\nWHAT NOT TO DO:\n- Do not make up specific unit numbers or availability\n- Do not promise specific returns\n- Do not push. If someone says they are just looking, respect that\n- Do not ask multiple questions in one message\n\nOUTPUT FORMAT:\nYou must respond in valid JSON with exactly two fields:\n1. reply - your message to send to the client\n2. lead_data - an object with any NEW information learned from THIS message only\n\nFor lead_data fields, set to null if no new info was learned. Fields:\n- status: new | cold | warm | hot | booked | handed_off\n- budget_min: number in AED or null\n- budget_max: number in AED or null\n- location_preference: string or null\n- property_type: apartment | villa | townhouse | penthouse | studio or null\n- bedrooms: string like 2 or 2-3 or null\n- purpose: investment | own_use | rental | undecided or null\n- timeline: immediate | 1-3 months | 3-6 months | exploring or null\n- nationality: string or null\n- phone: string or null\n- email: string or null\n- notes: brief important note or null\n- wants_booking: true/false/null\n- wants_handoff: true/false/null\n\nSTATUS LOGIC:\n- new: First message, no info yet\n- cold: Just browsing, no timeline, vague interest\n- warm: Has shared some preferences (budget OR area OR timeline)\n- hot: Has budget + area + timeline within 3 months\n- booked: Viewing scheduled\n- handed_off: Connected to human agent`;\n\n// Build messages array\nconst messages = [{ role: 'system', content: systemPrompt }];\n\n// Add lead context if returning user\nif (existingLead && existingLead.status) {\n  const ctx = ['Current lead profile:'];\n  if (existingLead.status) ctx.push('- Status: ' + existingLead.status);\n  if (existingLead.budget_min) ctx.push('- Budget min: AED ' + existingLead.budget_min);\n  if (existingLead.budget_max) ctx.push('- Budget max: AED ' + existingLead.budget_max);\n  if (existingLead.location_preference) ctx.push('- Area: ' + existingLead.location_preference);\n  if (existingLead.property_type) ctx.push('- Property type: ' + existingLead.property_type);\n  if (existingLead.bedrooms) ctx.push('- Bedrooms: ' + existingLead.bedrooms);\n  if (existingLead.purpose) ctx.push('- Purpose: ' + existingLead.purpose);\n  if (existingLead.timeline) ctx.push('- Timeline: ' + existingLead.timeline);\n  if (existingLead.notes) ctx.push('- Notes: ' + existingLead.notes);\n  if (existingLead.message_count) ctx.push('- Messages exchanged: ' + existingLead.message_count);\n  messages.push({ role: 'system', content: ctx.join('\\n') });\n}\n\n// Add conversation history\nfor (const conv of myHistory) {\n  const role = conv.direction === 'inbound' ? 'user' : 'assistant';\n  // For assistant messages, extract just the reply text if it was stored as JSON\n  let content = conv.message;\n  if (role === 'assistant') {\n    try {\n      const parsed = JSON.parse(content);\n      if (parsed.reply) content = parsed.reply;\n    } catch(e) { /* not JSON, use as-is */ }\n  }\n  messages.push({ role, content });\n}\n\n// Add current message\nmessages.push({ role: 'user', content: messageText });\n\n// Build the full OpenAI request body\nconst requestBody = {\n  model: 'gpt-4o-mini',\n  messages: messages,\n  response_format: {\n    type: 'json_schema',\n    json_schema: {\n      name: 'agent_response',\n      strict: true,\n      schema: {\n        type: 'object',\n        required: ['reply', 'lead_data'],\n        additionalProperties: false,\n        properties: {\n          reply: { type: 'string' },\n          lead_data: {\n            type: 'object',\n            additionalProperties: false,\n            required: ['status', 'budget_min', 'budget_max', 'location_preference', 'property_type', 'bedrooms', 'purpose', 'timeline', 'nationality', 'phone', 'email', 'notes', 'wants_booking', 'wants_handoff'],\n            properties: {\n              status: { type: ['string', 'null'] },\n              budget_min: { type: ['number', 'null'] },\n              budget_max: { type: ['number', 'null'] },\n              location_preference: { type: ['string', 'null'] },\n              property_type: { type: ['string', 'null'] },\n              bedrooms: { type: ['string', 'null'] },\n              purpose: { type: ['string', 'null'] },\n              timeline: { type: ['string', 'null'] },\n              nationality: { type: ['string', 'null'] },\n              phone: { type: ['string', 'null'] },\n              email: { type: ['string', 'null'] },\n              notes: { type: ['string', 'null'] },\n              wants_booking: { type: ['boolean', 'null'] },\n              wants_handoff: { type: ['boolean', 'null'] }\n            }\n          }\n        }\n      }\n    }\n  },\n  temperature: 0.7,\n  max_tokens: 500\n};\n\nreturn [{\n  json: {\n    chatId,\n    firstName,\n    username,\n    messageText,\n    isNewLead,\n    existingLead: existingLead || {},\n    requestBody,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "build-request",
+      "name": "Build Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [840, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.requestBody) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "call-openai",
+      "name": "Call OpenAI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 0],
+      "credentials": {
+        "openAiApi": {
+          "id": "",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// ================================================\n// PROCESS RESPONSE - Parse AI output + prepare data\n// ================================================\n\nconst openaiResponse = $input.first().json;\nconst buildData = $('Build Request').first().json;\n\n// Parse the AI response\nlet aiContent;\ntry {\n  aiContent = JSON.parse(openaiResponse.choices[0].message.content);\n} catch(e) {\n  // Fallback if JSON parsing fails\n  aiContent = {\n    reply: openaiResponse.choices[0].message.content || 'Sorry, I had a moment there. Could you say that again?',\n    lead_data: { status: null }\n  };\n}\n\nconst reply = aiContent.reply;\nconst newData = aiContent.lead_data || {};\n\n// Filter out null values from new lead data\nconst cleanNewData = {};\nfor (const [key, value] of Object.entries(newData)) {\n  if (value !== null && value !== undefined) {\n    cleanNewData[key] = value;\n  }\n}\n\n// Merge with existing lead data\nconst existing = buildData.existingLead || {};\nconst merged = { ...existing };\n\n// Only overwrite with genuinely new values\nfor (const [key, value] of Object.entries(cleanNewData)) {\n  merged[key] = value;\n}\n\n// Set metadata\nmerged.chat_id = buildData.chatId;\nmerged.first_name = merged.first_name || buildData.firstName;\nmerged.username = merged.username || buildData.username;\nmerged.last_contact = buildData.timestamp;\nmerged.message_count = (parseInt(merged.message_count) || 0) + 1;\n\nif (buildData.isNewLead) {\n  merged.first_contact = buildData.timestamp;\n  merged.follow_up_count = 0;\n  if (!merged.status) merged.status = 'new';\n}\n\n// Should we notify the owner?\nconst notifyOwner = (\n  merged.status === 'hot' ||\n  cleanNewData.wants_booking === true ||\n  cleanNewData.wants_handoff === true\n);\n\n// Build owner notification message\nlet ownerMessage = '';\nif (notifyOwner) {\n  ownerMessage = '🔥 HOT LEAD ALERT!\\n\\n';\n  ownerMessage += 'Name: ' + (merged.first_name || 'Unknown') + '\\n';\n  ownerMessage += 'Telegram: @' + (merged.username || 'N/A') + '\\n';\n  ownerMessage += 'Status: ' + (merged.status || 'unknown') + '\\n';\n  if (merged.budget_min || merged.budget_max) {\n    ownerMessage += 'Budget: AED ' + (merged.budget_min || '?') + ' - ' + (merged.budget_max || '?') + '\\n';\n  }\n  if (merged.location_preference) ownerMessage += 'Area: ' + merged.location_preference + '\\n';\n  if (merged.property_type) ownerMessage += 'Type: ' + merged.property_type + '\\n';\n  if (merged.timeline) ownerMessage += 'Timeline: ' + merged.timeline + '\\n';\n  if (merged.purpose) ownerMessage += 'Purpose: ' + merged.purpose + '\\n';\n  ownerMessage += '\\nLatest message: ' + buildData.messageText;\n  if (cleanNewData.wants_booking) ownerMessage += '\\n\\n⚡ WANTS TO BOOK A VIEWING';\n  if (cleanNewData.wants_handoff) ownerMessage += '\\n\\n📞 WANTS TO SPEAK TO SOMEONE';\n}\n\nreturn [{\n  json: {\n    reply,\n    chatId: buildData.chatId,\n    firstName: buildData.firstName,\n    username: buildData.username,\n    messageText: buildData.messageText,\n    isNewLead: buildData.isNewLead,\n    notifyOwner,\n    ownerMessage,\n    timestamp: buildData.timestamp,\n    leadData: merged,\n    newExtracted: cleanNewData\n  }\n}];"
+      },
+      "id": "process-response",
+      "name": "Process Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1400, 0]
+    },
+    {
+      "parameters": {
+        "operation": "sendMessage",
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.reply }}",
+        "additionalFields": {}
+      },
+      "id": "send-reply",
+      "name": "Send Reply",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1680, -400],
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "new-lead-check",
+              "leftValue": "={{ $json.isNewLead }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ]
+        }
+      },
+      "id": "if-new-lead",
+      "name": "Is New Lead?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1680, -150]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "value": "YOUR_SPREADSHEET_ID"
+        },
+        "sheetName": {
+          "value": "Leads"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "chat_id": "={{ $('Process Response').first().json.leadData.chat_id }}",
+            "first_name": "={{ $('Process Response').first().json.leadData.first_name }}",
+            "username": "={{ $('Process Response').first().json.leadData.username }}",
+            "status": "={{ $('Process Response').first().json.leadData.status }}",
+            "budget_min": "={{ $('Process Response').first().json.leadData.budget_min }}",
+            "budget_max": "={{ $('Process Response').first().json.leadData.budget_max }}",
+            "location_preference": "={{ $('Process Response').first().json.leadData.location_preference }}",
+            "property_type": "={{ $('Process Response').first().json.leadData.property_type }}",
+            "bedrooms": "={{ $('Process Response').first().json.leadData.bedrooms }}",
+            "purpose": "={{ $('Process Response').first().json.leadData.purpose }}",
+            "timeline": "={{ $('Process Response').first().json.leadData.timeline }}",
+            "nationality": "={{ $('Process Response').first().json.leadData.nationality }}",
+            "phone": "={{ $('Process Response').first().json.leadData.phone }}",
+            "email": "={{ $('Process Response').first().json.leadData.email }}",
+            "notes": "={{ $('Process Response').first().json.leadData.notes }}",
+            "message_count": "={{ $('Process Response').first().json.leadData.message_count }}",
+            "first_contact": "={{ $('Process Response').first().json.leadData.first_contact }}",
+            "last_contact": "={{ $('Process Response').first().json.leadData.last_contact }}",
+            "follow_up_count": "0"
+          }
+        },
+        "options": {}
+      },
+      "id": "append-lead",
+      "name": "Add New Lead",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1960, -250],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "value": "YOUR_SPREADSHEET_ID"
+        },
+        "sheetName": {
+          "value": "Leads"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "chat_id": "={{ $('Process Response').first().json.leadData.chat_id }}",
+            "status": "={{ $('Process Response').first().json.leadData.status }}",
+            "budget_min": "={{ $('Process Response').first().json.leadData.budget_min }}",
+            "budget_max": "={{ $('Process Response').first().json.leadData.budget_max }}",
+            "location_preference": "={{ $('Process Response').first().json.leadData.location_preference }}",
+            "property_type": "={{ $('Process Response').first().json.leadData.property_type }}",
+            "bedrooms": "={{ $('Process Response').first().json.leadData.bedrooms }}",
+            "purpose": "={{ $('Process Response').first().json.leadData.purpose }}",
+            "timeline": "={{ $('Process Response').first().json.leadData.timeline }}",
+            "nationality": "={{ $('Process Response').first().json.leadData.nationality }}",
+            "phone": "={{ $('Process Response').first().json.leadData.phone }}",
+            "email": "={{ $('Process Response').first().json.leadData.email }}",
+            "notes": "={{ $('Process Response').first().json.leadData.notes }}",
+            "message_count": "={{ $('Process Response').first().json.leadData.message_count }}",
+            "last_contact": "={{ $('Process Response').first().json.leadData.last_contact }}"
+          }
+        },
+        "columnToMatchOn": "chat_id",
+        "valueToMatchOn": "={{ $('Process Response').first().json.chatId }}",
+        "options": {}
+      },
+      "id": "update-lead",
+      "name": "Update Lead",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1960, -50],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "value": "YOUR_SPREADSHEET_ID"
+        },
+        "sheetName": {
+          "value": "Conversations"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{ $json.timestamp }}",
+            "chat_id": "={{ $json.chatId }}",
+            "direction": "inbound",
+            "message": "={{ $json.messageText }}",
+            "ai_extracted": "={{ JSON.stringify($json.newExtracted) }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "log-inbound",
+      "name": "Log Inbound",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1680, 100],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "value": "YOUR_SPREADSHEET_ID"
+        },
+        "sheetName": {
+          "value": "Conversations"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{ $json.timestamp }}",
+            "chat_id": "={{ $json.chatId }}",
+            "direction": "outbound",
+            "message": "={{ $json.reply }}",
+            "ai_extracted": ""
+          }
+        },
+        "options": {}
+      },
+      "id": "log-outbound",
+      "name": "Log Outbound",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1680, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "notify-check",
+              "leftValue": "={{ $json.notifyOwner }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ]
+        }
+      },
+      "id": "if-notify",
+      "name": "Should Notify?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1680, 500]
+    },
+    {
+      "parameters": {
+        "operation": "sendMessage",
+        "chatId": "YOUR_OWNER_CHAT_ID",
+        "text": "={{ $json.ownerMessage }}",
+        "additionalFields": {}
+      },
+      "id": "alert-owner",
+      "name": "Alert Owner",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1960, 500],
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Read Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Leads": {
+      "main": [
+        [
+          {
+            "node": "Read Conversations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Conversations": {
+      "main": [
+        [
+          {
+            "node": "Build Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Request": {
+      "main": [
+        [
+          {
+            "node": "Call OpenAI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call OpenAI": {
+      "main": [
+        [
+          {
+            "node": "Process Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Response": {
+      "main": [
+        [
+          {
+            "node": "Send Reply",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Is New Lead?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log Inbound",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log Outbound",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Should Notify?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is New Lead?": {
+      "main": [
+        [
+          {
+            "node": "Add New Lead",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Notify?": {
+      "main": [
+        [
+          {
+            "node": "Alert Owner",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

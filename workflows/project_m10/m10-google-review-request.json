@@ -1,0 +1,230 @@
+{
+  "name": "M10 - Google Review Request Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 14,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "id": "daily-trigger",
+      "name": "Every Day at 2 PM UAE",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "value": "YOUR_SPREADSHEET_ID"
+        },
+        "sheetName": {
+          "value": "Leads"
+        },
+        "options": {}
+      },
+      "id": "read-leads",
+      "name": "Read Converted Leads",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [460, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Find converted leads that haven't been asked for a review yet\nconst allItems = $input.all();\nconst now = new Date();\nconst leadsForReview = [];\n\nfor (const item of allItems) {\n  const lead = item.json;\n  \n  // Only ask converted/completed customers\n  if (lead.status !== 'converted') continue;\n  \n  // Skip if already asked for review\n  if (lead.review_requested === 'yes') continue;\n  \n  // Must have phone number\n  if (!lead.phone) continue;\n  \n  // Wait at least 24 hours after conversion\n  const convertedAt = new Date(lead.converted_at || lead.timestamp);\n  const hoursSince = (now - convertedAt) / (1000 * 60 * 60);\n  if (hoursSince < 24 || hoursSince > 168) continue; // Between 1-7 days\n  \n  leadsForReview.push({\n    json: {\n      name: lead.name || 'Valued Customer',\n      phone: lead.phone,\n      language: lead.language || 'en',\n      row_number: item.json.row_number\n    }\n  });\n}\n\nif (leadsForReview.length === 0) {\n  return [{ json: { no_reviews: true } }];\n}\n\n// Limit to 5 per day to avoid spam\nreturn leadsForReview.slice(0, 5);"
+      },
+      "id": "filter-for-review",
+      "name": "Filter Eligible Customers",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-customers",
+              "leftValue": "={{ $json.no_reviews }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-has-customers",
+      "name": "Has Customers?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Generate review request message\nconst lead = $json;\nconst googleReviewLink = 'YOUR_GOOGLE_REVIEW_LINK';\n\nlet message;\nif (lead.language === 'ar') {\n  message = `مرحبا ${lead.name}! 😊\\n\\nشكراً لزيارتك [SHOP NAME]! نتمنى أنك استمتعت بتجربتك معنا.\\n\\nلو عندك دقيقة، نقدر نقييمك على جوجل كثير:\\n${googleReviewLink}\\n\\nتقييمك يساعدنا نطور خدماتنا! شكراً لك 🙏`;\n} else {\n  message = `Hi ${lead.name}! 😊\\n\\nThank you for visiting [SHOP NAME]! We hope you had a great experience.\\n\\nIf you have a moment, we'd really appreciate a quick Google review:\\n${googleReviewLink}\\n\\nYour feedback helps us improve! Thank you 🙏`;\n}\n\nreturn { json: { ...lead, reviewMessage: message } };"
+      },
+      "id": "generate-review-msg",
+      "name": "Generate Review Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.facebook.com/v18.0/YOUR_PHONE_NUMBER_ID/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.phone }}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": \"{{ $json.reviewMessage }}\"\n  }\n}",
+        "options": {}
+      },
+      "id": "send-review-request",
+      "name": "Send Review Request via WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "WhatsApp Cloud API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "value": "YOUR_SPREADSHEET_ID"
+        },
+        "sheetName": {
+          "value": "Leads"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "phone": "={{ $json.phone }}",
+            "review_requested": "yes",
+            "review_requested_at": "={{ new Date().toISOString() }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "mark-review-sent",
+      "name": "Mark Review Requested",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1560, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every Day at 2 PM UAE": {
+      "main": [
+        [
+          {
+            "node": "Read Converted Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Converted Leads": {
+      "main": [
+        [
+          {
+            "node": "Filter Eligible Customers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Eligible Customers": {
+      "main": [
+        [
+          {
+            "node": "Has Customers?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Customers?": {
+      "main": [
+        [
+          {
+            "node": "Generate Review Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Review Message": {
+      "main": [
+        [
+          {
+            "node": "Send Review Request via WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Review Request via WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "Mark Review Requested",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "M10",
+      "id": "m10"
+    },
+    {
+      "name": "Reviews",
+      "id": "reviews"
+    }
+  ]
+}

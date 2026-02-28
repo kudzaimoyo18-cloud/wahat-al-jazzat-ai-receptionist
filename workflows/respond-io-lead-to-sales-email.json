@@ -1,0 +1,160 @@
+{
+  "name": "Respond.io Lead to Sales Email",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "respond-io-lead",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook - Respond.io",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "webhookId": "respond-io-lead"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-fullname",
+              "leftValue": "={{ $json.body.fullName }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            },
+            {
+              "id": "condition-phone",
+              "leftValue": "={{ $json.body.phoneNumber }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-has-details",
+      "name": "Has Name and Phone?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $env.SALES_AGENT_EMAIL || 'sales@example.com' }}",
+        "subject": "=New Lead from Respond.io: {{ $json.body.fullName }}",
+        "emailType": "text",
+        "message": "=A new lead has provided their contact details via Respond.io.\n\n--- LEAD DETAILS ---\n\nFull Name: {{ $json.body.fullName }}\nPhone Number: {{ $json.body.phoneNumber }}\n{{ $json.body.email ? 'Email: ' + $json.body.email : '' }}\n{{ $json.body.message ? 'Message: ' + $json.body.message : '' }}\n\n--- SOURCE INFO ---\n\nChannel: {{ $json.body.channel || 'Not specified' }}\nTimestamp: {{ $now.format('yyyy-MM-dd HH:mm:ss') }}\n\n---\nPlease follow up with this lead promptly.\n\nThis is an automated notification from your Respond.io integration.",
+        "options": {}
+      },
+      "id": "send-email",
+      "name": "Email Sales Agent",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [720, 200]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "status",
+              "value": "success"
+            },
+            {
+              "name": "message",
+              "value": "Lead notification sent to sales team"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "response-success",
+      "name": "Success Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [940, 200]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "status",
+              "value": "skipped"
+            },
+            {
+              "name": "message",
+              "value": "Missing required fields (fullName or phoneNumber)"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "response-skipped",
+      "name": "Skipped Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [720, 420]
+    }
+  ],
+  "connections": {
+    "Webhook - Respond.io": {
+      "main": [
+        [
+          {
+            "node": "Has Name and Phone?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Name and Phone?": {
+      "main": [
+        [
+          {
+            "node": "Email Sales Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skipped Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Sales Agent": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null
+}

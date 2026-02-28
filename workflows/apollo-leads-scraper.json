@@ -1,0 +1,305 @@
+{
+  "name": "Apollo Leads Scraper - AI Agency",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Apollo Lead Search",
+        "formDescription": "Configure your Apollo.io lead search parameters",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Job Titles",
+              "fieldType": "text",
+              "placeholder": "CEO, Founder, CTO, Head of Marketing",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Locations",
+              "fieldType": "text",
+              "placeholder": "United States, United Kingdom, Dubai",
+              "requiredField": false
+            },
+            {
+              "fieldLabel": "Industries",
+              "fieldType": "text",
+              "placeholder": "Technology, Finance, Real Estate, Healthcare",
+              "requiredField": false
+            },
+            {
+              "fieldLabel": "Company Size",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  { "option": "1-10" },
+                  { "option": "11-50" },
+                  { "option": "51-200" },
+                  { "option": "201-500" },
+                  { "option": "501-1000" },
+                  { "option": "1001-5000" },
+                  { "option": "5001+" },
+                  { "option": "Any" }
+                ]
+              },
+              "requiredField": false
+            },
+            {
+              "fieldLabel": "Number of Leads",
+              "fieldType": "number",
+              "placeholder": "100",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Include Emails Only",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  { "option": "Yes - Only leads with emails" },
+                  { "option": "No - Include all leads" }
+                ]
+              },
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "form-trigger",
+      "name": "Lead Search Form",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.2,
+      "position": [0, 0],
+      "webhookId": "apollo-lead-search"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// ============================================\n// BUILD APOLLO SEARCH CONFIG\n// ============================================\n\nconst formData = $input.first().json;\n\n// Parse job titles into array\nconst jobTitles = formData['Job Titles']\n  .split(',')\n  .map(t => t.trim())\n  .filter(t => t.length > 0);\n\n// Parse locations\nconst locations = formData['Locations']\n  ? formData['Locations'].split(',').map(l => l.trim()).filter(l => l.length > 0)\n  : [];\n\n// Parse industries\nconst industries = formData['Industries']\n  ? formData['Industries'].split(',').map(i => i.trim()).filter(i => i.length > 0)\n  : [];\n\n// Company size mapping\nconst sizeMap = {\n  '1-10': '1,10',\n  '11-50': '11,50',\n  '51-200': '51,200',\n  '201-500': '201,500',\n  '501-1000': '501,1000',\n  '1001-5000': '1001,5000',\n  '5001+': '5001,10000',\n  'Any': ''\n};\n\nconst companySize = sizeMap[formData['Company Size']] || '';\nconst maxLeads = parseInt(formData['Number of Leads']) || 100;\nconst emailsOnly = formData['Include Emails Only'] === 'Yes - Only leads with emails';\n\n// Build Apify actor input\nconst actorInput = {\n  searchType: 'people',\n  maxResults: maxLeads,\n  includeEmails: true,\n  titles: jobTitles,\n  locations: locations.length > 0 ? locations : undefined,\n  industries: industries.length > 0 ? industries : undefined,\n  employeeRanges: companySize ? [companySize] : undefined\n};\n\n// Clean undefined values\nObject.keys(actorInput).forEach(key => {\n  if (actorInput[key] === undefined) {\n    delete actorInput[key];\n  }\n});\n\nreturn [{\n  json: {\n    actorInput,\n    emailsOnly,\n    maxLeads,\n    searchCriteria: {\n      jobTitles,\n      locations,\n      industries,\n      companySize: formData['Company Size']\n    },\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "build-config",
+      "name": "Build Search Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [280, 0]
+    },
+    {
+      "parameters": {
+        "resource": "actor",
+        "actorId": "curious_coder/apollo-io-scraper",
+        "input": "={{ JSON.stringify($json.actorInput) }}",
+        "options": {
+          "memoryMbytes": 1024,
+          "timeoutSecs": 300,
+          "waitForFinish": true
+        }
+      },
+      "id": "run-apify-actor",
+      "name": "Run Apollo Scraper",
+      "type": "@apify/n8n-nodes-apify.apify",
+      "typeVersion": 1,
+      "position": [560, 0],
+      "credentials": {
+        "apifyApi": {
+          "id": "",
+          "name": "Apify API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "dataset",
+        "operation": "getItems",
+        "datasetId": "={{ $json.defaultDatasetId }}",
+        "options": {
+          "limit": 1000
+        }
+      },
+      "id": "get-dataset",
+      "name": "Get Scraped Leads",
+      "type": "@apify/n8n-nodes-apify.apify",
+      "typeVersion": 1,
+      "position": [840, 0],
+      "credentials": {
+        "apifyApi": {
+          "id": "",
+          "name": "Apify API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// ============================================\n// PROCESS AND FILTER LEADS\n// ============================================\n\nconst items = $input.all();\nconst config = $('Build Search Config').first().json;\nconst emailsOnly = config.emailsOnly;\n\n// Flatten and process leads\nlet leads = [];\n\nfor (const item of items) {\n  const data = item.json;\n  \n  // Handle both array and object responses\n  if (Array.isArray(data)) {\n    leads = leads.concat(data);\n  } else if (data.items && Array.isArray(data.items)) {\n    leads = leads.concat(data.items);\n  } else if (data.email || data.name || data.firstName) {\n    leads.push(data);\n  }\n}\n\n// Filter and clean leads\nconst processedLeads = leads\n  .filter(lead => {\n    // Filter out if emails only and no email\n    if (emailsOnly && !lead.email && !lead.personalEmail && !lead.workEmail) {\n      return false;\n    }\n    // Must have at least a name\n    if (!lead.name && !lead.firstName && !lead.full_name) {\n      return false;\n    }\n    return true;\n  })\n  .map((lead, index) => {\n    // Normalize lead data structure\n    return {\n      id: index + 1,\n      full_name: lead.name || lead.full_name || `${lead.firstName || ''} ${lead.lastName || ''}`.trim(),\n      first_name: lead.firstName || lead.first_name || (lead.name ? lead.name.split(' ')[0] : ''),\n      last_name: lead.lastName || lead.last_name || '',\n      email: lead.email || lead.personalEmail || lead.workEmail || '',\n      email_status: lead.emailStatus || lead.email_status || 'unknown',\n      phone: lead.phone || lead.personalPhone || lead.workPhone || '',\n      title: lead.title || lead.headline || lead.job_title || '',\n      company: lead.company || lead.organizationName || lead.organization_name || '',\n      company_website: lead.companyUrl || lead.company_website || lead.website || '',\n      linkedin_url: lead.linkedinUrl || lead.linkedin_url || lead.profileUrl || '',\n      location: lead.location || lead.city || '',\n      industry: lead.industry || '',\n      company_size: lead.employeeCount || lead.company_size || '',\n      seniority: lead.seniority || '',\n      scraped_at: config.timestamp\n    };\n  });\n\n// Return stats and leads\nconst stats = {\n  total_scraped: leads.length,\n  after_filtering: processedLeads.length,\n  with_email: processedLeads.filter(l => l.email).length,\n  with_phone: processedLeads.filter(l => l.phone).length,\n  with_linkedin: processedLeads.filter(l => l.linkedin_url).length\n};\n\nreturn [{\n  json: {\n    stats,\n    leads: processedLeads,\n    searchCriteria: config.searchCriteria\n  }\n}];"
+      },
+      "id": "process-leads",
+      "name": "Process Leads",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 0]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Split leads into individual items for Google Sheets\nconst data = $input.first().json;\nconst leads = data.leads || [];\n\nreturn leads.map(lead => ({ json: lead }));"
+      },
+      "id": "split-leads",
+      "name": "Split to Items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1400, 0]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "value": "YOUR_SPREADSHEET_ID"
+        },
+        "sheetName": {
+          "value": "Apollo Leads"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.id }}",
+            "full_name": "={{ $json.full_name }}",
+            "first_name": "={{ $json.first_name }}",
+            "last_name": "={{ $json.last_name }}",
+            "email": "={{ $json.email }}",
+            "email_status": "={{ $json.email_status }}",
+            "phone": "={{ $json.phone }}",
+            "title": "={{ $json.title }}",
+            "company": "={{ $json.company }}",
+            "company_website": "={{ $json.company_website }}",
+            "linkedin_url": "={{ $json.linkedin_url }}",
+            "location": "={{ $json.location }}",
+            "industry": "={{ $json.industry }}",
+            "company_size": "={{ $json.company_size }}",
+            "seniority": "={{ $json.seniority }}",
+            "scraped_at": "={{ $json.scraped_at }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "save-to-sheets",
+      "name": "Save to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1680, 0],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Generate summary report\nconst processData = $('Process Leads').first().json;\nconst stats = processData.stats;\nconst criteria = processData.searchCriteria;\n\nconst summary = `APOLLO LEAD SCRAPE COMPLETE\n\nSearch Criteria:\n- Job Titles: ${criteria.jobTitles.join(', ')}\n- Locations: ${criteria.locations.length > 0 ? criteria.locations.join(', ') : 'Any'}\n- Industries: ${criteria.industries.length > 0 ? criteria.industries.join(', ') : 'Any'}\n- Company Size: ${criteria.companySize || 'Any'}\n\nResults:\n- Total Scraped: ${stats.total_scraped}\n- After Filtering: ${stats.after_filtering}\n- With Email: ${stats.with_email}\n- With Phone: ${stats.with_phone}\n- With LinkedIn: ${stats.with_linkedin}\n\nLeads saved to Google Sheets!`;\n\nreturn [{ json: { summary, stats } }];"
+      },
+      "id": "generate-summary",
+      "name": "Generate Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1680, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.summary }}",
+        "options": {}
+      },
+      "id": "respond-webhook",
+      "name": "Respond to Form",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1960, 200]
+    }
+  ],
+  "connections": {
+    "Lead Search Form": {
+      "main": [
+        [
+          {
+            "node": "Build Search Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Search Config": {
+      "main": [
+        [
+          {
+            "node": "Run Apollo Scraper",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Apollo Scraper": {
+      "main": [
+        [
+          {
+            "node": "Get Scraped Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Scraped Leads": {
+      "main": [
+        [
+          {
+            "node": "Process Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Leads": {
+      "main": [
+        [
+          {
+            "node": "Split to Items",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split to Items": {
+      "main": [
+        [
+          {
+            "node": "Save to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Summary": {
+      "main": [
+        [
+          {
+            "node": "Respond to Form",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

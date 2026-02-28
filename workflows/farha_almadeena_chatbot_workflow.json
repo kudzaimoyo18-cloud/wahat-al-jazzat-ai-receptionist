@@ -1,0 +1,386 @@
+{
+  "name": "Farha Al Madeena Restaurant Chatbot",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "faahmadeen",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "webhook-trigger",
+      "name": "Chat Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "faahmadeen"
+    },
+    {
+      "parameters": {
+        "options": {
+          "systemMessage": "You are the friendly AI assistant for Farha Al Madeena Bakery & Restaurant in Dubai. Your role is to:\n\n1. GREET customers warmly and help them with menu inquiries\n2. ANSWER questions about menu items, prices, ingredients, and recommendations\n3. TAKE ORDERS by collecting: items, quantities, customer name, phone number, and order type (Dine-in/Pickup/Delivery)\n4. For DELIVERY orders, also collect the delivery address\n5. CONFIRM orders before finalizing\n\n## RESTAURANT INFO:\n- Location: Ground Floor, Al Reem Building, Street-5, Dubai Investment Park-1, OPP Carrefour Market, Dubai, UAE\n- Phone: 04 881 19 94, +971 56 422 9197\n- WhatsApp: 055 63 77 367\n- FREE Home Delivery available\n- All prices include VAT (in AED/Dhs.)\n\n## ORDER TAKING PROCESS:\n1. Help customer browse menu and select items\n2. Confirm each item and quantity\n3. Ask for order type: Dine-in, Pickup, or Delivery\n4. Collect customer name and phone number\n5. For delivery: collect full address\n6. Summarize order with total price\n7. When customer confirms, respond with EXACTLY this format on a new line:\n[ORDER_CONFIRMED]{\"items\": [{\"name\": \"item name\", \"quantity\": 1, \"price\": 10.00}], \"customer_name\": \"Name\", \"phone\": \"number\", \"order_type\": \"Delivery/Pickup/Dine-in\", \"address\": \"address or N/A\", \"total\": 25.00}[/ORDER_CONFIRMED]\n\n## MENU HIGHLIGHTS:\n- Breakfast: Masala Dosa (6), Poori Bhaji (6), Idly Set (5), Puttu Kadala (5)\n- Biryani: Chicken (13), Mutton (15), Beef Dum (14), Fish (6-10)\n- Chinese: Chicken Chilli (15), Dragon Chicken (15), Manchurian (12-15)\n- Grills: Grill Chicken (13-25), Charcoal items, Kebabs\n- Shawarma: Regular (5), Arabic (15), Plate (15-22)\n- Burgers: Starting from 8 AED\n- Fresh Juices: 6-12 AED\n- Combos: Various meal combos 9-16 AED\n\nBe helpful, suggest popular items, and always confirm prices from the knowledge base. Keep responses concise and friendly."
+        }
+      },
+      "id": "ai-agent",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [620, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "options": {
+          "temperature": 0.7
+        }
+      },
+      "id": "openai-chat",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1,
+      "position": [620, 500],
+      "credentials": {
+        "openAiApi": {
+          "id": "REPLACE_WITH_YOUR_OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "memory",
+      "name": "Window Buffer Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.2,
+      "position": [620, 660]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract message from webhook body\nconst body = $input.first().json.body || $input.first().json;\nconst chatInput = body.chatInput || body.message || '';\nconst sessionId = body.sessionId || 'default';\n\nreturn [{\n  json: {\n    chatInput: chatInput,\n    sessionId: sessionId\n  }\n}];"
+      },
+      "id": "extract-input",
+      "name": "Extract Chat Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Check if the AI response contains an order confirmation\nconst aiResponse = $input.first().json.output || $input.first().json.text || '';\n\nconst orderMatch = aiResponse.match(/\\[ORDER_CONFIRMED\\](.*?)\\[\\/ORDER_CONFIRMED\\]/s);\n\nif (orderMatch) {\n  try {\n    const orderData = JSON.parse(orderMatch[1]);\n    const orderId = 'ORD-' + Date.now();\n    \n    // Clean response for customer (remove order tags)\n    const cleanResponse = aiResponse.replace(/\\[ORDER_CONFIRMED\\].*?\\[\\/ORDER_CONFIRMED\\]/s, '').trim();\n    \n    return [{\n      json: {\n        hasOrder: true,\n        orderId: orderId,\n        orderData: orderData,\n        response: cleanResponse,\n        timestamp: new Date().toISOString()\n      }\n    }];\n  } catch (e) {\n    return [{\n      json: {\n        hasOrder: false,\n        response: aiResponse,\n        error: e.message\n      }\n    }];\n  }\n}\n\nreturn [{\n  json: {\n    hasOrder: false,\n    response: aiResponse\n  }\n}];"
+      },
+      "id": "parse-order",
+      "name": "Parse Order Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [840, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "order-check",
+              "leftValue": "={{ $json.hasOrder }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-order",
+      "name": "Has Order?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1060, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.KITCHEN_WEBHOOK_URL || 'https://your-kitchen-dashboard.com/api/orders' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"orderId\": \"{{ $json.orderId }}\",\n  \"items\": {{ JSON.stringify($json.orderData.items) }},\n  \"customer\": {\n    \"name\": \"{{ $json.orderData.customer_name }}\",\n    \"phone\": \"{{ $json.orderData.phone }}\"\n  },\n  \"orderType\": \"{{ $json.orderData.order_type }}\",\n  \"address\": \"{{ $json.orderData.address || 'N/A' }}\",\n  \"total\": {{ $json.orderData.total }},\n  \"timestamp\": \"{{ $json.timestamp }}\",\n  \"status\": \"new\"\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "send-to-kitchen",
+      "name": "Send to Kitchen (Webhook)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1280, 200],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ output: $json.response, orderId: $json.orderId || null, hasOrder: $json.hasOrder }) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond-with-order",
+      "name": "Respond (With Order)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1500, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ output: $json.response, hasOrder: false }) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond-no-order",
+      "name": "Respond (No Order)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1280, 400]
+    },
+    {
+      "parameters": {
+        "toEmail": "={{ $env.KITCHEN_EMAIL || 'kitchen@farhaalmadeena.com' }}",
+        "subject": "=🍽️ NEW ORDER #{{ $json.orderId }}",
+        "emailType": "text",
+        "message": "=NEW ORDER RECEIVED!\n\n📋 Order #{{ $json.orderId }}\n⏰ {{ $json.timestamp }}\n\n--- ITEMS ---\n{{ $json.orderData.items.map(i => `• ${i.quantity}x ${i.name} - ${i.price} AED`).join('\\n') }}\n\n💰 TOTAL: {{ $json.orderData.total }} AED\n\n--- CUSTOMER ---\n👤 Name: {{ $json.orderData.customer_name }}\n📱 Phone: {{ $json.orderData.phone }}\n🚗 Type: {{ $json.orderData.order_type }}\n{{ $json.orderData.order_type === 'Delivery' ? '📍 Address: ' + $json.orderData.address : '' }}\n\n---\nFarha Al Madeena Restaurant",
+        "options": {}
+      },
+      "id": "email-kitchen",
+      "name": "Email Kitchen (Backup)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1280, 60],
+      "credentials": {
+        "smtp": {
+          "id": "REPLACE_WITH_YOUR_SMTP_CREDENTIAL_ID",
+          "name": "SMTP"
+        }
+      },
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "faahmadeen-orders",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "orders-webhook",
+      "name": "Orders Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 600],
+      "webhookId": "faahmadeen-orders"
+    },
+    {
+      "parameters": {
+        "jsCode": "// This is a placeholder for order management\n// In production, you would store orders in a database\n// For now, we'll just acknowledge the request\n\nconst body = $input.first().json.body || $input.first().json;\nconst action = body.action; // 'get_orders', 'update_status', etc.\nconst orderId = body.orderId;\nconst newStatus = body.status;\n\n// Mock response - replace with actual database logic\nreturn [{\n  json: {\n    success: true,\n    message: `Order ${orderId || 'request'} processed`,\n    action: action,\n    status: newStatus || 'acknowledged'\n  }\n}];"
+      },
+      "id": "handle-orders",
+      "name": "Handle Order Actions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 600]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond-orders",
+      "name": "Respond Orders",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [680, 600]
+    }
+  ],
+  "connections": {
+    "Chat Webhook": {
+      "main": [
+        [
+          {
+            "node": "Extract Chat Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Chat Input": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Parse Order Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Window Buffer Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Order Response": {
+      "main": [
+        [
+          {
+            "node": "Has Order?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Order?": {
+      "main": [
+        [
+          {
+            "node": "Send to Kitchen (Webhook)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Email Kitchen (Backup)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond (No Order)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send to Kitchen (Webhook)": {
+      "main": [
+        [
+          {
+            "node": "Respond (With Order)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Orders Webhook": {
+      "main": [
+        [
+          {
+            "node": "Handle Order Actions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Order Actions": {
+      "main": [
+        [
+          {
+            "node": "Respond Orders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 2,
+  "pinData": {}
+}

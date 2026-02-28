@@ -1,0 +1,138 @@
+{
+  "name": "M10 - WhatsApp Connector (Respond.io / WABA)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "m10-whatsapp-incoming",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "whatsapp-webhook",
+      "name": "WhatsApp Incoming",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "m10-whatsapp-incoming"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Parse incoming WhatsApp message\n// Compatible with WhatsApp Business API / Respond.io / Twilio format\nconst body = $input.all()[0].json.body || $input.all()[0].json;\n\n// Extract message based on provider format\nlet message, phone, name, sessionId;\n\n// WhatsApp Business API (Meta Cloud API) format\nif (body.entry && body.entry[0]) {\n  const changes = body.entry[0].changes[0];\n  const msg = changes.value.messages[0];\n  message = msg.text?.body || '';\n  phone = msg.from;\n  name = changes.value.contacts?.[0]?.profile?.name || 'Customer';\n  sessionId = phone;\n}\n// Respond.io format\nelse if (body.contact && body.message) {\n  message = body.message.text || body.message.body || '';\n  phone = body.contact.phone || body.contact.id;\n  name = body.contact.name || 'Customer';\n  sessionId = body.contact.id;\n}\n// Twilio format\nelse if (body.Body && body.From) {\n  message = body.Body;\n  phone = body.From.replace('whatsapp:', '');\n  name = body.ProfileName || 'Customer';\n  sessionId = phone;\n}\n// Generic fallback\nelse {\n  message = body.message || body.text || '';\n  phone = body.phone || body.from || '';\n  name = body.name || 'Customer';\n  sessionId = phone || 'unknown';\n}\n\nreturn [{\n  json: {\n    message,\n    phone,\n    name,\n    sessionId,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "parse-message",
+      "name": "Parse WhatsApp Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.N8N_BASE_URL || 'https://your-n8n-instance.com' }}/webhook/m10-receptionist",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"message\": \"{{ $json.message }}\",\n  \"sessionId\": \"{{ $json.sessionId }}\",\n  \"phone\": \"{{ $json.phone }}\",\n  \"name\": \"{{ $json.name }}\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "call-receptionist",
+      "name": "Send to AI Receptionist",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Format response for WhatsApp reply\nconst aiResponse = $input.all()[0].json;\nlet replyText = '';\n\n// Handle different response formats\nif (typeof aiResponse === 'string') {\n  replyText = aiResponse;\n} else if (aiResponse.output) {\n  replyText = aiResponse.output;\n} else if (aiResponse.text) {\n  replyText = aiResponse.text;\n} else if (aiResponse.data) {\n  replyText = aiResponse.data;\n} else {\n  replyText = JSON.stringify(aiResponse);\n}\n\n// Clean up any lead capture tags from the response\nreplyText = replyText.replace(/\\[LEAD_CAPTURED\\].*?\\[\\/LEAD_CAPTURED\\]/gs, '').trim();\n\n// Get original message context\nconst phone = $('Parse WhatsApp Message').item.json.phone;\nconst name = $('Parse WhatsApp Message').item.json.name;\n\nreturn [{\n  json: {\n    phone,\n    name,\n    reply: replyText\n  }\n}];"
+      },
+      "id": "format-reply",
+      "name": "Format Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.facebook.com/v18.0/YOUR_PHONE_NUMBER_ID/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.phone }}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": \"{{ $json.reply }}\"\n  }\n}",
+        "options": {}
+      },
+      "id": "send-whatsapp-reply",
+      "name": "Send WhatsApp Reply",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "WhatsApp Cloud API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "WhatsApp Incoming": {
+      "main": [
+        [
+          {
+            "node": "Parse WhatsApp Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse WhatsApp Message": {
+      "main": [
+        [
+          {
+            "node": "Send to AI Receptionist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send to AI Receptionist": {
+      "main": [
+        [
+          {
+            "node": "Format Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Reply": {
+      "main": [
+        [
+          {
+            "node": "Send WhatsApp Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "M10",
+      "id": "m10"
+    },
+    {
+      "name": "WhatsApp",
+      "id": "whatsapp"
+    }
+  ]
+}
