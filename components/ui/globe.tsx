@@ -15,9 +15,9 @@ const GLOBE_CONFIG = {
   diffuse: 0.4,
   mapSamples: 16000,
   mapBrightness: 1.2,
-  baseColor: [1, 1, 1],
-  markerColor: [251 / 255, 100 / 255, 21 / 255],
-  glowColor: [1, 1, 1],
+  baseColor: [1, 1, 1] as [number, number, number],
+  markerColor: [251 / 255, 100 / 255, 21 / 255] as [number, number, number],
+  glowColor: [1, 1, 1] as [number, number, number],
   markers: [
     { location: [24.4539, 54.3773], size: 0.15 }, // UAE
     { location: [21.5126, 55.9233], size: 0.12 }, // Oman
