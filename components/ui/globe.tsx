@@ -5,31 +5,33 @@ import { useCallback, useEffect, useRef, useState } from "react"
 
 import { cn } from "@/lib/utils"
 
+// Randomly scattered markers across UAE and Oman region
+const generateRandomMarkers = (count: number) => {
+  const markers = []
+  for (let i = 0; i < count; i++) {
+    // Generate random coordinates in UAE/Oman region
+    const lat = 22 + Math.random() * 4 // 22-26°N
+    const lng = 53 + Math.random() * 8 // 53-61°E
+    const size = 0.05 + Math.random() * 0.05 // 0.05-0.1 size
+    markers.push({ location: [lat, lng], size })
+  }
+  return markers
+}
+
 const GLOBE_CONFIG = {
-  width: 800,
-  height: 800,
+  width: 600,
+  height: 600,
   devicePixelRatio: 2,
   phi: 0,
-  theta: 0.3,
-  dark: 0,
-  diffuse: 0.4,
+  theta: 0,
+  dark: 1, // Dark mode (black globe)
+  diffuse: 0.6, // Higher diffuse for cleaner surface (no grid effect)
   mapSamples: 16000,
-  mapBrightness: 1.2,
-  baseColor: [1, 1, 1],
-  markerColor: [251 / 255, 100 / 255, 21 / 255],
-  glowColor: [1, 1, 1],
-  markers: [
-    { location: [24.4539, 54.3773], size: 0.15 }, // UAE
-    { location: [21.5126, 55.9233], size: 0.12 }, // Oman
-    { location: [29.3117, 47.4818], size: 0.1 },  // Kuwait
-    { location: [23.4241, 53.8478], size: 0.08 },  // Saudi Arabia
-    { location: [33.6844, 73.0479], size: 0.08 },  // Pakistan
-    { location: [20.5937, 78.9629], size: 0.08 },  // India
-    { location: [30.3753, 69.3451], size: 0.06 },  // Afghanistan
-    { location: [34.8021, 38.9968], size: 0.06 },  // Syria
-    { location: [41.0082, 28.9784], size: 0.06 },  // Turkey
-    { location: [26.8206, 30.8025], size: 0.06 },  // Egypt
-  ],
+  mapBrightness: 1.8,
+  baseColor: [0, 0, 0], // Black globe
+  markerColor: [1, 0.84, 0], // Gold markers (#FFD700)
+  glowColor: [1, 0.84, 0], // Gold glow
+  markers: generateRandomMarkers(15), // 15+ random markers scattered across UAE/Oman
 }
 
 export function Globe({
@@ -63,7 +65,8 @@ export function Globe({
 
   const onRender = useCallback(
     (state: Record<string, any>) => {
-      if (!pointerInteracting.current) phi += 0.005
+      // Manual rotation only - no auto-rotation when not interacting
+      if (!pointerInteracting.current) phi += 0
       state.phi = phi + r
       state.width = width * 2
       state.height = width * 2
@@ -104,6 +107,9 @@ export function Globe({
           "size-full opacity-0 transition-opacity duration-500 [contain:layout_paint_size]",
         )}
         ref={canvasRef}
+        style={{
+          filter: "drop-shadow(0 0 40px rgba(255, 215, 0, 0.3))", // Gold glow effect (#FFD700)
+        }}
         onPointerDown={(e) =>
           updatePointerInteraction(
             e.clientX - pointerInteractionMovement.current,

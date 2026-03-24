@@ -2,6 +2,7 @@
 
 import { MetalButton, LiquidButton } from "@/components/ui/liquid-glass-button";
 import { AuroraBackground } from "@/components/ui/aurora-background";
+import { Globe } from "@/components/ui/globe";
 import { useState } from "react";
 
 export default function Home() {
@@ -14,8 +15,8 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center gap-2">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-xl">MH</span>
+              <div className="w-10 h-10 bg-mh-gold rounded-lg flex items-center justify-center shadow-[0_0_20px_rgba(255,215,0,0.3)]">
+                <span className="text-black font-bold text-xl">MH</span>
               </div>
               <span className="text-white font-bold text-xl">Miners Hub</span>
             </div>
@@ -25,7 +26,7 @@ export default function Home() {
               <a href="#cooling" className="text-gray-300 hover:text-white transition">Cooling Solutions</a>
               <a href="#contact" className="text-gray-300 hover:text-white transition">Contact</a>
             </div>
-            <LiquidButton size="sm" className="text-blue-400">Get Started</LiquidButton>
+            <LiquidButton size="sm" className="text-mh-gold">Get Started</LiquidButton>
           </div>
         </div>
       </nav>
@@ -34,14 +35,14 @@ export default function Home() {
       <section className="relative pt-32 pb-20 px-4 sm:px-6 lg:px-8 overflow-hidden">
         <div className="max-w-7xl mx-auto">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
-            <div className="relative z-10">
-              <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500/10 border border-blue-500/20 rounded-full mb-6">
-                <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
-                <span className="text-blue-400 text-sm font-medium">Operating in UAE & Oman</span>
+            <div className="relative z-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
+              <div className="inline-flex items-center gap-2 px-4 py-2 bg-mh-gold/10 border border-mh-gold/20 rounded-full mb-6">
+                <span className="w-2 h-2 bg-mh-gold rounded-full animate-pulse"></span>
+                <span className="text-mh-gold text-sm font-medium">Operating in UAE & Oman</span>
               </div>
               <h1 className="text-5xl md:text-7xl font-bold text-white mb-6 leading-tight">
                 Premium
-                <span className="bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+                <span className="bg-gradient-to-r from-mh-gold to-mh-blue bg-clip-text text-transparent">
                   {" "}Crypto Mining{" "}
                 </span>
                 Solutions
@@ -50,10 +51,10 @@ export default function Home() {
                 Access to 40MW of mining capacity with state-of-the-art facilities across the UAE and Oman.
               </p>
               <div className="flex flex-col sm:flex-row gap-4">
-                <MetalButton variant="primary" className="text-lg px-8 py-6">
+                <MetalButton variant="gold" className="text-lg px-8 py-6">
                   Start Mining Today
                 </MetalButton>
-                <LiquidButton size="xxl" className="text-blue-400">
+                <LiquidButton size="xxl" className="text-mh-gold">
                   Book a Tour
                 </LiquidButton>
               </div>
@@ -78,6 +79,9 @@ export default function Home() {
                 </div>
               </div>
             </div>
+            <div className="relative z-10 flex items-center justify-center">
+              <Globe />
+            </div>
           </div>
         </div>
       </section>
@@ -92,9 +96,9 @@ export default function Home() {
               { title: "Advanced Cooling", desc: "State-of-the-art immersion, hydro, and air cooling systems" },
               { title: "Sustainable Mining", desc: "Energy-efficient practices aligned with UAE sustainability goals" },
             ].map((item, i) => (
-              <div key={i} className="p-6 bg-slate-800/30 border border-slate-700 rounded-xl hover:border-blue-500/50 transition-all">
-                <div className="w-12 h-12 bg-blue-500/10 rounded-lg flex items-center justify-center mb-4">
-                  <svg className="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div key={i} className="p-6 bg-slate-800/30 border border-slate-700 rounded-xl hover:border-mh-gold/50 transition-all">
+                <div className="w-12 h-12 bg-mh-gold/10 rounded-lg flex items-center justify-center mb-4">
+                  <svg className="w-6 h-6 text-mh-gold" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                   </svg>
                 </div>
@@ -122,13 +126,13 @@ export default function Home() {
               { name: "Whatsminer M53", brand: "MicroBT", hash: "230 TH/s", power: "3204W" },
               { name: "KS3", brand: "IceRiver", hash: "9.5 TH/s", power: "3400W" },
             ].map((miner, i) => (
-              <div key={i} className="group bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-slate-700 rounded-2xl p-6 hover:border-blue-500/50 transition-all">
+              <div key={i} className="group bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-slate-700 rounded-2xl p-6 hover:border-mh-gold/50 transition-all">
                 <div className="aspect-video bg-slate-800 rounded-xl mb-4 flex items-center justify-center">
-                  <svg className="w-16 h-16 text-gray-600 group-hover:text-blue-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-16 h-16 text-gray-600 group-hover:text-mh-gold transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
                   </svg>
                 </div>
-                <div className="text-blue-400 text-sm font-medium mb-1">{miner.brand}</div>
+                <div className="text-mh-gold text-sm font-medium mb-1">{miner.brand}</div>
                 <h3 className="text-white font-bold text-xl mb-2">{miner.name}</h3>
                 <div className="space-y-1">
                   <div className="flex justify-between text-sm">
@@ -182,6 +186,18 @@ export default function Home() {
                 loop
                 muted
                 playsInline
+                poster={
+                  activeTab === 'hydro'
+                    ? '/water-cooled-poster.jpg'
+                    : activeTab === 'air'
+                    ? '/air-cooled-poster.jpg'
+                    : '/emmersion-poster.jpg'
+                }
+                onError={(e) => {
+                  // Fallback to poster image if video fails to load
+                  const target = e.target as HTMLVideoElement;
+                  target.style.display = 'none';
+                }}
               >
                 <source
                   src={
@@ -355,39 +371,6 @@ export default function Home() {
                 </div>
               </div>
             </div>
-
-            <div className="bg-slate-800/30 border border-slate-700 rounded-2xl p-8">
-              <h3 className="text-2xl font-bold text-white mb-6">Send Us a Message</h3>
-              <form className="space-y-4">
-                <div>
-                  <label className="text-gray-300 text-sm mb-2 block">Name</label>
-                  <input
-                    type="text"
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition"
-                    placeholder="Your name"
-                  />
-                </div>
-                <div>
-                  <label className="text-gray-300 text-sm mb-2 block">Email</label>
-                  <input
-                    type="email"
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition"
-                    placeholder="your@email.com"
-                  />
-                </div>
-                <div>
-                  <label className="text-gray-300 text-sm mb-2 block">Message</label>
-                  <textarea
-                    rows={4}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition resize-none"
-                    placeholder="Tell us about your mining goals..."
-                  />
-                </div>
-                <MetalButton variant="primary" className="w-full">
-                  Send Message
-                </MetalButton>
-              </form>
-            </div>
           </div>
         </div>
       </section>
@@ -398,8 +381,8 @@ export default function Home() {
           <div className="grid md:grid-cols-4 gap-8 mb-8">
             <div>
               <div className="flex items-center gap-2 mb-4">
-                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                  <span className="text-white font-bold text-xl">MH</span>
+                <div className="w-10 h-10 bg-mh-gold rounded-lg flex items-center justify-center shadow-[0_0_20px_rgba(255,215,0,0.3)]">
+                  <span className="text-black font-bold text-xl">MH</span>
                 </div>
                 <span className="text-white font-bold text-xl">Miners Hub</span>
               </div>
@@ -411,20 +394,20 @@ export default function Home() {
             <div>
               <h4 className="text-white font-semibold mb-4">Services</h4>
               <ul className="space-y-2 text-sm text-gray-400">
-                <li><a href="#" className="hover:text-white transition">ASIC Miner Sales</a></li>
-                <li><a href="#" className="hover:text-white transition">Hosting Services</a></li>
-                <li><a href="#" className="hover:text-white transition">Repair & Maintenance</a></li>
-                <li><a href="#" className="hover:text-white transition">Cooling Solutions</a></li>
+                <li>ASIC Miner Sales</li>
+                <li>Hosting Services</li>
+                <li>Repair & Maintenance</li>
+                <li>Cooling Solutions</li>
               </ul>
             </div>
 
             <div>
               <h4 className="text-white font-semibold mb-4">Company</h4>
               <ul className="space-y-2 text-sm text-gray-400">
-                <li><a href="#" className="hover:text-white transition">About Us</a></li>
-                <li><a href="#" className="hover:text-white transition">Careers</a></li>
-                <li><a href="#" className="hover:text-white transition">Blog</a></li>
-                <li><a href="#" className="hover:text-white transition">Contact</a></li>
+                <li>About Us</li>
+                <li>Careers</li>
+                <li>Blog</li>
+                <li>Contact</li>
               </ul>
             </div>
 
@@ -432,13 +415,12 @@ export default function Home() {
               <h4 className="text-white font-semibold mb-4">Follow Us</h4>
               <div className="flex gap-4">
                 {['Instagram', 'TikTok', 'LinkedIn', 'Twitter'].map((social) => (
-                  <a
+                  <div
                     key={social}
-                    href="#"
-                    className="w-10 h-10 bg-slate-800 rounded-lg flex items-center justify-center hover:bg-blue-500 transition"
+                    className="w-10 h-10 bg-slate-800 rounded-lg flex items-center justify-center"
                   >
-                    <span className="text-gray-400 hover:text-white text-xs">{social[0]}</span>
-                  </a>
+                    <span className="text-gray-400 text-xs">{social[0]}</span>
+                  </div>
                 ))}
               </div>
             </div>

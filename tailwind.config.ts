@@ -12,7 +12,9 @@ const config: Config = {
       colors: {
         background: "var(--background)",
         foreground: "var(--foreground)",
-        'mh-blue': '#3B82F6',
+        'mh-gold': '#FFD700', // Gold brand color
+        'mh-blue': '#003366', // Deep blue brand color
+        'mh-black': '#000000', // Black background
         'mh-dark': '#1F2937',
         'mh-light': '#F3F4F6',
       },
